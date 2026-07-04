@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="screen-orientation" content="portrait" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Stashimo" />
+  <meta name="theme-color" content="#4b3869" />
+  <meta name="description" content="An open-source lightweight pantry tracker and meal planner" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="msapplication-TileColor" content="#4b3869" />
+  <title>Stashimo</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <div class="logo">STASHIMO</div>
+      <p class="tagline">An open-source lightweight pantry tracker &amp; meal planner</p>
+    </div>
+    <nav>
+      <button class="nav-tab active" onclick="showPage('pantry', this)">Pantry</button>
+      <button class="nav-tab" onclick="showPage('planner', this)">Meal Planner</button>
+    </nav>
+    <div class="header-right">
+      <button class="btn-header-icon" onclick="openSettings()" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ══════════ PANTRY PAGE ══════════ -->
+    <div class="page active" id="page-pantry">
+
+      <section class="card" id="add-item-section">
+        <h2>Add Item</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="item-name">Item Name</label>
+            <input type="text" id="item-name" placeholder="e.g. Rice, Shampoo" />
+          </div>
+          <div class="field">
+            <label for="item-type">Type</label>
+            <select id="item-type">
+              <option value="food">Food</option>
+              <option value="supply">Supply</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="item-tag">Tag / Group</label>
+            <select id="item-tag"></select>
+          </div>
+          <div class="field">
+            <label for="item-current">Current Count <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="number" id="item-current" placeholder="e.g. 3" min="0" />
+          </div>
+          <div class="field">
+            <label for="item-target">Target Count <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="number" id="item-target" placeholder="e.g. 5" min="0" />
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="save-item-btn" onclick="saveItem()" style="flex:1;">Save Item</button>
+          <button class="btn-secondary" onclick="openTagModal()" style="flex-shrink:0;">+ Tag</button>
+        </div>
+      </section>
+
+      <section class="card" id="pantry-list-section">
+        <div class="section-header-row">
+          <h2>Pantry</h2>
+          <div class="header-row-actions">
+            <input type="text" id="pantry-search" placeholder="Search..." oninput="renderPantry()" />
+          </div>
+        </div>
+        <div class="filter-pills" id="pantry-filter-pills">
+          <button class="filter-pill active" data-filter="all" onclick="setPantryFilter('all', this)">All</button>
+          <button class="filter-pill" data-filter="ok" onclick="setPantryFilter('ok', this)">In Stock</button>
+          <button class="filter-pill" data-filter="low" onclick="setPantryFilter('low', this)">Needs Refill</button>
+          <button class="filter-pill" data-filter="out" onclick="setPantryFilter('out', this)">Out of Stock</button>
+        </div>
+        <div id="pantry-list">
+          <p class="empty-msg">No items yet. Add your first item above!</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════ MEAL PLANNER PAGE ══════════ -->
+    <div class="page" id="page-planner">
+
+      <section class="card">
+        <div class="week-nav">
+          <button onclick="changeWeek(-1)">‹</button>
+          <div class="week-nav-label" id="week-nav-label" onclick="openCalendar()">
+            <div class="week-range" id="week-range-text">—</div>
+            <div class="week-sub" id="week-sub-text">Tap to pick a week</div>
+          </div>
+          <button onclick="changeWeek(1)">›</button>
+        </div>
+        <div class="week-actions">
+          <button class="btn-secondary" onclick="openCalendar()">Pick Week</button>
+          <button class="btn-secondary" onclick="goToThisWeek()">This Week</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-header-row">
+          <h2>Planned Meals</h2>
+        </div>
+        <div id="meal-week-list">
+          <p class="empty-msg">No meals planned for this week yet.</p>
+        </div>
+        <button class="btn-add-card-item" onclick="openMealModal()">+ Add Meal</button>
+      </section>
+
+      <section class="card">
+        <h2>Grocery List</h2>
+        <p class="card-desc" style="padding-top:0;margin-top:-10px;">Ingredients for meals planned this week.</p>
+        <div class="grocery-summary">
+          <div class="grocery-stat total">
+            <span class="grocery-stat-val" id="grocery-total-cost">₱0</span>
+            <span class="grocery-stat-label">Total Est.</span>
+          </div>
+          <div class="grocery-stat bought">
+            <span class="grocery-stat-val" id="grocery-bought-cost">₱0</span>
+            <span class="grocery-stat-label">Bought</span>
+          </div>
+          <div class="grocery-stat remaining">
+            <span class="grocery-stat-val" id="grocery-remaining-cost">₱0</span>
+            <span class="grocery-stat-label">Remaining</span>
+          </div>
+        </div>
+        <div id="grocery-list">
+          <p class="empty-msg">Nothing to buy yet — plan a meal first.</p>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bottom-nav">
+    <button class="bottom-nav-btn active" onclick="showPage('pantry', this, true)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.91 8.84L8.56 21.19a1.93 1.93 0 0 1-2.73 0L3.7 19.06a1.93 1.93 0 0 1 0-2.73L16.05 3.98"/><path d="M12 9l-3 3"/><path d="M15 6l-3 3"/><path d="M20.5 9.5L14 3"/></svg>
+      Pantry
+    </button>
+    <button class="bottom-nav-btn" onclick="showPage('planner', this, true)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      Planner
+    </button>
+  </nav>
+
+  <!-- ADD/EDIT ITEM MODAL -->
+  <div id="item-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeItemModal()">
+    <div class="modal">
+      <h2 id="item-modal-title">Edit Item</h2>
+      <input type="hidden" id="edit-item-id" />
+      <div class="form-grid">
+        <div class="field full"><label>Item Name</label><input type="text" id="edit-item-name" /></div>
+        <div class="field">
+          <label>Type</label>
+          <select id="edit-item-type"><option value="food">Food</option><option value="supply">Supply</option></select>
+        </div>
+        <div class="field"><label>Tag / Group</label><select id="edit-item-tag"></select></div>
+        <div class="field"><label>Current Count</label><input type="number" id="edit-item-current" min="0" /></div>
+        <div class="field"><label>Target Count</label><input type="number" id="edit-item-target" min="0" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-delete" style="flex:0.6;" onclick="deleteItem()">Delete</button>
+        <button class="btn-secondary" onclick="closeItemModal()">Cancel</button>
+        <button onclick="updateItem()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAG MANAGER MODAL -->
+  <div id="tag-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeTagModal()">
+    <div class="modal">
+      <h2>Manage Tags</h2>
+      <p class="modal-sub">Create color tags to group your pantry items (e.g. Breakfast, Bathroom, Cleaning).</p>
+
+      <div class="form-grid" style="grid-template-columns:1fr;">
+        <div class="field full">
+          <label>Tag Name</label>
+          <input type="text" id="new-tag-name" placeholder="e.g. Bathroom" />
+        </div>
+        <div class="field full">
+          <label>Color</label>
+          <div class="color-swatch-grid" id="new-tag-color-grid"></div>
+        </div>
+      </div>
+      <input type="hidden" id="editing-tag-id" />
+      <button class="btn-full" id="tag-save-btn" onclick="saveTag()">Add Tag</button>
+
+      <div class="section-divider" style="margin-top:20px;">Existing Tags</div>
+      <div id="tag-list"></div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeTagModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD/EDIT MEAL MODAL -->
+  <div id="meal-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeMealModal()">
+    <div class="modal">
+      <h2 id="meal-modal-title">Add Meal</h2>
+      <input type="hidden" id="editing-meal-id" />
+      <div class="form-grid">
+        <div class="field full">
+          <label>Meal Name</label>
+          <input type="text" id="meal-name" placeholder="e.g. Chicken Adobo" />
+        </div>
+        <div class="field">
+          <label>Day</label>
+          <select id="meal-day">
+            <option value="0">Monday</option>
+            <option value="1">Tuesday</option>
+            <option value="2">Wednesday</option>
+            <option value="3">Thursday</option>
+            <option value="4">Friday</option>
+            <option value="5">Saturday</option>
+            <option value="6">Sunday</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tag Color</label>
+          <div class="color-swatch-grid" id="meal-color-grid" style="padding-top:4px;"></div>
+        </div>
+      </div>
+
+      <div class="section-divider">Ingredients</div>
+      <div class="ingredient-list-wrap" id="meal-ingredient-list"></div>
+      <button class="btn-add-ingredient" onclick="addIngredientRow()">+ Add Ingredient</button>
+
+      <div class="modal-actions">
+        <button class="btn-delete" id="meal-delete-btn" style="flex:0.6; display:none;" onclick="deleteMeal()">Delete</button>
+        <button class="btn-secondary" onclick="closeMealModal()">Cancel</button>
+        <button onclick="saveMeal()">Save Meal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CALENDAR / WEEK PICKER MODAL -->
+  <div id="cal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeCalendar()">
+    <div class="cal-modal">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="calPrevMonth()">‹</button>
+        <span id="cal-month-label"></span>
+        <button class="cal-nav" onclick="calNextMonth()">›</button>
+      </div>
+      <div class="cal-weekdays">
+        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn-secondary" onclick="closeCalendar()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeSettings()">
+    <div class="modal">
+      <h2>Settings</h2>
+      <p class="modal-sub">All data is stored locally on your device.</p>
+
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Export Data</div>
+          <div class="settings-row-desc">Download a backup as a JSON file.</div>
+        </div>
+        <button class="btn-secondary" onclick="exportData()">Export</button>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Import Data</div>
+          <div class="settings-row-desc">Restore from a backup JSON file.</div>
+        </div>
+        <button class="btn-secondary" onclick="document.getElementById('import-file-input').click()">Import</button>
+        <input type="file" id="import-file-input" accept="application/json" style="display:none;" onchange="importData(event)" />
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label" style="color:var(--danger);">Reset All Data</div>
+          <div class="settings-row-desc">Permanently erase everything.</div>
+        </div>
+        <button class="btn-delete" onclick="resetAllData()">Reset</button>
+      </div>
+
+      <div class="modal-actions">
+        <button onclick="closeSettings()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TUTORIAL MODAL -->
+  <div id="tutorial-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeTutorial()">
+    <div class="tutorial-modal">
+      <div class="tutorial-steps">
+        <div class="tutorial-step active" id="tut-step-0">
+          <h3>Pantry Tracker</h3>
+          <p>Add food and supplies, tag them with a custom color and name, and group them however you like. Mark items as eaten/used, out of stock, or needs refilling with an optional target count.</p>
+        </div>
+        <div class="tutorial-step" id="tut-step-1">
+          <h3>Meal Planner</h3>
+          <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal shows whether its ingredients are complete, partial, or missing.</p>
+          <p style="margin-top:10px;">Browse other weeks with the calendar, and check off ingredients from the Grocery List as you shop.</p>
+        </div>
+      </div>
+      <div class="tutorial-dots">
+        <span class="tut-dot active" onclick="goToTutStep(0)"></span>
+        <span class="tut-dot" onclick="goToTutStep(1)"></span>
+      </div>
+      <div class="tutorial-actions">
+        <button class="btn-secondary" id="tut-prev" onclick="tutNav(-1)" style="visibility:hidden;">Back</button>
+        <button id="tut-next" onclick="tutNav(1)">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP BUTTON -->
+  <button class="help-btn" onclick="openTutorial()">?</button>
+
+  <script src="script.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW error:', err));
+      });
+    }
+  </script>
+
+  <footer>
+    <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
+    <p>©2026 Neo Antonio</p>
+    <p>All rights reserved.</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.1</p>
+  </footer>
+
+</body>
+</html>
