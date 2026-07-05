@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Stashimo" />
-  <meta name="theme-color" content="#4b3869" />
-  <meta name="description" content="An open-source lightweight pantry tracker and meal planner" />
+  <meta name="theme-color" content="#23272f" />
+  <meta name="description" content="An open-source lightweight supplies tracker and meal planner" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <meta name="msapplication-TileColor" content="#4b3869" />
+  <meta name="msapplication-TileColor" content="#23272f" />
   <title>Stashimo</title>
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="style.css" />
@@ -23,20 +23,20 @@
   <header>
     <div class="header-left">
       <div class="logo">STASHIMO</div>
-      <p class="tagline">An open-source lightweight pantry tracker &amp; meal planner</p>
+      <p class="tagline">An open-source lightweight supplies tracker &amp; meal planner</p>
     </div>
-    <nav>
-      <button class="nav-tab active" onclick="showPage('pantry', this)">Pantry</button>
-      <button class="nav-tab" onclick="showPage('planner', this)">Meal Planner</button>
-    </nav>
     <div class="header-right">
-      <button class="btn-header-icon" onclick="openSettings()" title="Settings">⚙</button>
+      <nav>
+        <button class="nav-tab active" onclick="showPage('pantry', this)">Supplies</button>
+        <button class="nav-tab" onclick="showPage('planner', this)">Meal Planner</button>
+      </nav>
+      <button class="btn-header-settings" onclick="openSettings()">Settings</button>
     </div>
   </header>
 
   <main>
 
-    <!-- ══════════ PANTRY PAGE ══════════ -->
+    <!-- ══════════ SUPPLIES PAGE ══════════ -->
     <div class="page active" id="page-pantry">
 
       <section class="card" id="add-item-section">
@@ -48,14 +48,27 @@
           </div>
           <div class="field">
             <label for="item-type">Type</label>
-            <select id="item-type">
-              <option value="food">Food</option>
-              <option value="supply">Supply</option>
-            </select>
+            <select id="item-type"></select>
           </div>
           <div class="field">
-            <label for="item-tag">Tag / Group</label>
-            <select id="item-tag"></select>
+            <label for="item-unit">Unit</label>
+            <select id="item-unit" onchange="onUnitSelectChange('item-unit','item-unit-custom')">
+              <option value="piece">Piece</option>
+              <option value="pack">Pack</option>
+              <option value="bottle">Bottle</option>
+              <option value="box">Box</option>
+              <option value="can">Can</option>
+              <option value="kg">Kg</option>
+              <option value="g">g</option>
+              <option value="liter">Liter</option>
+              <option value="ml">ml</option>
+              <option value="custom">+ Custom…</option>
+            </select>
+            <input type="text" id="item-unit-custom" placeholder="Custom unit name" style="display:none; margin-top:6px;" />
+          </div>
+          <div class="field">
+            <label for="item-price">Price per Unit <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="number" id="item-price" placeholder="e.g. 25" min="0" step="0.01" />
           </div>
           <div class="field">
             <label for="item-current">Current Count <span style="text-transform:none;font-style:italic;">(optional)</span></label>
@@ -68,13 +81,13 @@
         </div>
         <div style="display:flex; gap:8px;">
           <button id="save-item-btn" onclick="saveItem()" style="flex:1;">Save Item</button>
-          <button class="btn-secondary" onclick="openTagModal()" style="flex-shrink:0;">+ Tag</button>
+          <button class="btn-secondary" onclick="openTypeModal()" style="flex-shrink:0;">+ Type</button>
         </div>
       </section>
 
       <section class="card" id="pantry-list-section">
         <div class="section-header-row">
-          <h2>Pantry</h2>
+          <h2>Supplies</h2>
           <div class="header-row-actions">
             <input type="text" id="pantry-search" placeholder="Search..." oninput="renderPantry()" />
           </div>
@@ -88,6 +101,27 @@
         <div id="pantry-list">
           <p class="empty-msg">No items yet. Add your first item above!</p>
         </div>
+      </section>
+
+      <section class="card" id="restock-estimate-section">
+        <h2>Restock Cost Estimate</h2>
+        <div class="field full" style="margin-bottom:14px;">
+          <label for="restock-type-filter">Category</label>
+          <select id="restock-type-filter" onchange="renderRestockEstimate()">
+            <option value="all">All Types</option>
+          </select>
+        </div>
+        <div class="grocery-summary cols-2">
+          <div class="grocery-stat">
+            <span class="grocery-stat-val" id="restock-min-cost">₱0</span>
+            <span class="grocery-stat-label">Min to Restock</span>
+          </div>
+          <div class="grocery-stat">
+            <span class="grocery-stat-val" id="restock-max-cost">₱0</span>
+            <span class="grocery-stat-label">Max Stock (Targets)</span>
+          </div>
+        </div>
+        <p class="card-desc" style="padding-top:10px; margin-top:0;">Min assumes at least 1 unit of every item that needs restocking. Max stock uses each item's target count (falls back to 1 unit if no target is set).</p>
       </section>
     </div>
 
@@ -139,6 +173,11 @@
         <div id="grocery-list">
           <p class="empty-msg">Nothing to buy yet — plan a meal first.</p>
         </div>
+        <div class="grocery-add-row" style="margin-top:14px; margin-bottom:0;">
+          <input type="text" id="grocery-extra-name" placeholder="Add an item not tied to a meal…" list="ingredient-suggestions" />
+          <input type="number" id="grocery-extra-cost" placeholder="₱" min="0" step="0.01" />
+          <button onclick="addExtraGroceryItem()">Add</button>
+        </div>
       </section>
     </div>
 
@@ -147,8 +186,8 @@
   <!-- BOTTOM NAV (mobile) -->
   <nav class="bottom-nav">
     <button class="bottom-nav-btn active" onclick="showPage('pantry', this, true)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.91 8.84L8.56 21.19a1.93 1.93 0 0 1-2.73 0L3.7 19.06a1.93 1.93 0 0 1 0-2.73L16.05 3.98"/><path d="M12 9l-3 3"/><path d="M15 6l-3 3"/><path d="M20.5 9.5L14 3"/></svg>
-      Pantry
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M9 12h6"/></svg>
+      Supplies
     </button>
     <button class="bottom-nav-btn" onclick="showPage('planner', this, true)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
@@ -163,11 +202,24 @@
       <input type="hidden" id="edit-item-id" />
       <div class="form-grid">
         <div class="field full"><label>Item Name</label><input type="text" id="edit-item-name" /></div>
+        <div class="field"><label>Type</label><select id="edit-item-type"></select></div>
         <div class="field">
-          <label>Type</label>
-          <select id="edit-item-type"><option value="food">Food</option><option value="supply">Supply</option></select>
+          <label>Unit</label>
+          <select id="edit-item-unit" onchange="onUnitSelectChange('edit-item-unit','edit-item-unit-custom')">
+            <option value="piece">Piece</option>
+            <option value="pack">Pack</option>
+            <option value="bottle">Bottle</option>
+            <option value="box">Box</option>
+            <option value="can">Can</option>
+            <option value="kg">Kg</option>
+            <option value="g">g</option>
+            <option value="liter">Liter</option>
+            <option value="ml">ml</option>
+            <option value="custom">+ Custom…</option>
+          </select>
+          <input type="text" id="edit-item-unit-custom" placeholder="Custom unit name" style="display:none; margin-top:6px;" />
         </div>
-        <div class="field"><label>Tag / Group</label><select id="edit-item-tag"></select></div>
+        <div class="field"><label>Price per Unit</label><input type="number" id="edit-item-price" min="0" step="0.01" /></div>
         <div class="field"><label>Current Count</label><input type="number" id="edit-item-current" min="0" /></div>
         <div class="field"><label>Target Count</label><input type="number" id="edit-item-target" min="0" /></div>
       </div>
@@ -179,30 +231,30 @@
     </div>
   </div>
 
-  <!-- TAG MANAGER MODAL -->
-  <div id="tag-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeTagModal()">
+  <!-- TYPE MANAGER MODAL -->
+  <div id="type-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeTypeModal()">
     <div class="modal">
-      <h2>Manage Tags</h2>
-      <p class="modal-sub">Create color tags to group your pantry items (e.g. Breakfast, Bathroom, Cleaning).</p>
+      <h2>Manage Types</h2>
+      <p class="modal-sub">Create color types to group your supplies (e.g. Food, Bathroom, Cleaning).</p>
 
       <div class="form-grid" style="grid-template-columns:1fr;">
         <div class="field full">
-          <label>Tag Name</label>
-          <input type="text" id="new-tag-name" placeholder="e.g. Bathroom" />
+          <label>Type Name</label>
+          <input type="text" id="new-type-name" placeholder="e.g. Bathroom" />
         </div>
         <div class="field full">
           <label>Color</label>
-          <div class="color-swatch-grid" id="new-tag-color-grid"></div>
+          <div class="color-swatch-grid" id="new-type-color-grid"></div>
         </div>
       </div>
-      <input type="hidden" id="editing-tag-id" />
-      <button class="btn-full" id="tag-save-btn" onclick="saveTag()">Add Tag</button>
+      <input type="hidden" id="editing-type-id" />
+      <button class="btn-full" id="type-save-btn" onclick="saveType()">Add Type</button>
 
-      <div class="section-divider" style="margin-top:20px;">Existing Tags</div>
-      <div id="tag-list"></div>
+      <div class="section-divider" style="margin-top:20px;">Existing Types</div>
+      <div id="type-list"></div>
 
       <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeTagModal()">Done</button>
+        <button class="btn-secondary" onclick="closeTypeModal()">Done</button>
       </div>
     </div>
   </div>
@@ -217,7 +269,7 @@
           <label>Meal Name</label>
           <input type="text" id="meal-name" placeholder="e.g. Chicken Adobo" />
         </div>
-        <div class="field">
+        <div class="field full">
           <label>Day</label>
           <select id="meal-day">
             <option value="0">Monday</option>
@@ -229,13 +281,11 @@
             <option value="6">Sunday</option>
           </select>
         </div>
-        <div class="field">
-          <label>Tag Color</label>
-          <div class="color-swatch-grid" id="meal-color-grid" style="padding-top:4px;"></div>
-        </div>
       </div>
+      <p class="modal-sub" id="meal-effective-note" style="display:none;"></p>
 
       <div class="section-divider">Ingredients</div>
+      <datalist id="ingredient-suggestions"></datalist>
       <div class="ingredient-list-wrap" id="meal-ingredient-list"></div>
       <button class="btn-add-ingredient" onclick="addIngredientRow()">+ Add Ingredient</button>
 
@@ -271,6 +321,11 @@
       <h2>Settings</h2>
       <p class="modal-sub">All data is stored locally on your device.</p>
 
+      <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:10px;">
+        <div class="settings-row-label">App Theme</div>
+        <div class="theme-swatch-grid" id="theme-swatch-grid"></div>
+      </div>
+
       <div class="settings-row">
         <div>
           <div class="settings-row-label">Export Data</div>
@@ -305,13 +360,13 @@
     <div class="tutorial-modal">
       <div class="tutorial-steps">
         <div class="tutorial-step active" id="tut-step-0">
-          <h3>Pantry Tracker</h3>
-          <p>Add food and supplies, tag them with a custom color and name, and group them however you like. Mark items as eaten/used, out of stock, or needs refilling with an optional target count.</p>
+          <h3>Supplies Tracker</h3>
+          <p>Add food and supplies, group them by a custom-colored type, and track a unit + price per unit. Mark items as used, out of stock, or needs refilling with an optional target count.</p>
         </div>
         <div class="tutorial-step" id="tut-step-1">
           <h3>Meal Planner</h3>
           <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal shows whether its ingredients are complete, partial, or missing.</p>
-          <p style="margin-top:10px;">Browse other weeks with the calendar, and check off ingredients from the Grocery List as you shop.</p>
+          <p style="margin-top:10px;">Meals repeat weekly — editing ingredients applies from that week forward, leaving past weeks untouched. Check off items right from the Grocery List as you shop.</p>
         </div>
       </div>
       <div class="tutorial-dots">
@@ -343,7 +398,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.1</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.2</p>
   </footer>
 
 </body>
