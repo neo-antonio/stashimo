@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════
    STASHIMO v0.2 — Supplies Tracker & Meal Planner
-   All data stored locally on-device via localStorage. 
+   All data stored locally on-device via localStorage.
    ══════════════════════════════════════════════════════ */
 
 /* ─── CONSTANTS ─── */
