@@ -68,8 +68,12 @@
             <input type="text" id="item-unit-custom" placeholder="Custom unit name" style="display:none; margin-top:6px;" />
           </div>
           <div class="field">
-            <label for="item-price">Price per Unit <span style="text-transform:none;font-style:italic;">(optional)</span></label>
-            <input type="number" id="item-price" placeholder="e.g. 25" min="0" step="0.01" />
+            <label for="item-min-price">Min Price (₱) <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="number" id="item-min-price" placeholder="e.g. 300" min="0" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="item-min-units">Min Units <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="number" id="item-min-units" placeholder="e.g. 6" min="1" step="1" />
           </div>
           <div class="field">
             <label for="item-current">Current Count <span style="text-transform:none;font-style:italic;">(optional)</span></label>
@@ -80,6 +84,7 @@
             <input type="number" id="item-target" placeholder="e.g. 5" min="0" />
           </div>
         </div>
+        <p class="card-desc" style="padding:0 0 12px; margin-top:-10px;">If this item can only be bought in bulk (e.g. ₱300 for a pack of 6), enter the pack price and quantity — leave Min Units blank for a plain per-unit price.</p>
         <div style="display:flex; gap:8px;">
           <button id="save-item-btn" onclick="saveItem()" style="flex:1;">Save Item</button>
           <button class="btn-secondary" onclick="openTypeModal()" style="flex-shrink:0;">+ Type</button>
@@ -180,6 +185,26 @@
           <button onclick="addExtraGroceryItem()">Add</button>
         </div>
       </section>
+
+      <section class="card">
+        <details class="dropdown-card">
+          <summary>Reuse a Past Meal</summary>
+          <div class="dropdown-body">
+            <input type="text" id="past-meal-search" placeholder="Search past meals..." oninput="renderPastMealsDropdown()" />
+            <div id="past-meals-list"></div>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <details class="dropdown-card">
+          <summary>All Ingredients</summary>
+          <div class="dropdown-body">
+            <input type="text" id="ingredient-library-search" placeholder="Search ingredients..." oninput="renderIngredientLibraryDropdown()" />
+            <div id="ingredient-library-list"></div>
+          </div>
+        </details>
+      </section>
     </div>
 
   </main>
@@ -220,7 +245,8 @@
           </select>
           <input type="text" id="edit-item-unit-custom" placeholder="Custom unit name" style="display:none; margin-top:6px;" />
         </div>
-        <div class="field"><label>Price per Unit</label><input type="number" id="edit-item-price" min="0" step="0.01" /></div>
+        <div class="field"><label>Min Price (₱)</label><input type="number" id="edit-item-min-price" min="0" step="0.01" /></div>
+        <div class="field"><label>Min Units</label><input type="number" id="edit-item-min-units" min="1" step="1" /></div>
         <div class="field"><label>Current Count</label><input type="number" id="edit-item-current" min="0" /></div>
         <div class="field"><label>Target Count</label><input type="number" id="edit-item-target" min="0" /></div>
       </div>
@@ -283,7 +309,6 @@
           </select>
         </div>
       </div>
-      <p class="modal-sub" id="meal-effective-note" style="display:none;"></p>
 
       <div class="section-divider">Ingredients</div>
       <datalist id="ingredient-suggestions"></datalist>
@@ -367,7 +392,7 @@
         <div class="tutorial-step" id="tut-step-1">
           <h3>Meal Planner</h3>
           <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal shows whether its ingredients are complete, partial, or missing.</p>
-          <p style="margin-top:10px;">Meals repeat weekly — editing ingredients applies from that week forward, leaving past weeks untouched. Check off items right from the Grocery List as you shop.</p>
+          <p style="margin-top:10px;">Meals belong to one week only — pick which day they're for. Reuse a past meal or grab a saved ingredient anytime from the dropdowns below the Grocery List. Check off items as you shop.</p>
         </div>
       </div>
       <div class="tutorial-dots">
@@ -399,7 +424,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.5</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.3</p>
   </footer>
 
 </body>

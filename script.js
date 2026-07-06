@@ -1,12 +1,18 @@
 /* ══════════════════════════════════════════════════════
-   STASHIMO v0.2 — Supplies Tracker & Meal Planner
+   STASHIMO v0.3 — Supplies Tracker & Meal Planner
    All data stored locally on-device via localStorage.
    ══════════════════════════════════════════════════════ */
 
+/* ─── OUTLINE ICONS (no emoji) ─── */
+const ICON_EDIT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>';
+
 /* ─── CONSTANTS ─── */
+// Distinct hues only — no near-duplicate purples/greens/blues.
 const COLOR_PALETTE = [
-  '#23272f', '#ffffff', '#b98bd6', '#8bb6d6', '#8bd6b0', '#d6c48b',
-  '#d68b9e', '#a3d68b', '#d6a08b', '#8ba3d6', '#c78bd6', '#8bd6c9'
+  '#23272f', '#ffffff', '#e08283', '#e0a458', '#e0c15c',
+  '#7fb08f', '#5fa8a0', '#6f9bd6', '#7b7fd6', '#a67bd6', '#d67ba0', '#b08a6b'
 ];
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const UNIT_PRESETS = ['piece','pack','bottle','box','can','kg','g','liter','ml'];
@@ -15,15 +21,15 @@ const LS_KEYS = {
   items: 'stashimo_items',
   types: 'stashimo_types',
   meals: 'stashimo_meals',
-  boughtLog: 'stashimo_bought_log',
   ingLib: 'stashimo_ingredient_library',
   extraGrocery: 'stashimo_extra_grocery',
   week: 'stashimo_current_week',
   theme: 'stashimo_theme',
   tut: 'stashimo_tutorial_seen',
-  // legacy (v0.1) keys used for one-time migration
+  // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
-  legacyPrice: 'stashimo_price_memory'
+  legacyPrice: 'stashimo_price_memory',
+  legacyBoughtLog: 'stashimo_bought_log'
 };
 
 /* ─── HELPERS ─── */
@@ -76,17 +82,17 @@ function loadJSON(key, fallback){
 let items = loadJSON(LS_KEYS.items, []);
 let types = loadJSON(LS_KEYS.types, []);
 let meals = loadJSON(LS_KEYS.meals, []);
-let boughtLog = loadJSON(LS_KEYS.boughtLog, {});
 let ingredientLibrary = loadJSON(LS_KEYS.ingLib, {}); // { lowercaseName: { name, cost } }
-let extraGroceryItems = loadJSON(LS_KEYS.extraGrocery, {}); // { weekStart: [{id, name, cost}] }
+let extraGroceryItems = loadJSON(LS_KEYS.extraGrocery, {}); // { weekStart: [{id, name, cost, bought}] }
 let currentWeekStart = localStorage.getItem(LS_KEYS.week) || toISODate(getMonday(new Date()));
 let currentTheme = localStorage.getItem(LS_KEYS.theme) || 'slate';
 let pantryFilter = 'all';
 let calViewDate = fromISODate(currentWeekStart);
 let tutStep = 0;
 
-/* ─── ONE-TIME MIGRATION FROM v0.1 SCHEMA ─── */
+/* ─── ONE-TIME MIGRATION ─── */
 (function migrateLegacyData(){
+  // v0.1 -> current: tags/items/meals shape
   const legacyTagsRaw = localStorage.getItem(LS_KEYS.legacyTags);
   if (legacyTagsRaw && types.length === 0){
     try {
@@ -96,41 +102,64 @@ let tutStep = 0;
         if (i.tagId !== undefined){ i.typeId = i.tagId; delete i.tagId; }
         if (i.type !== undefined){ delete i.type; }
         if (i.unit === undefined) i.unit = 'piece';
-        if (i.pricePerUnit === undefined) i.pricePerUnit = null;
-      });
-      // legacy meals had weekStart/color/ingredients(with inline bought)
-      meals.forEach(m => {
-        if (m.versions) return; // already migrated shape
-        const legacyIngredients = (m.ingredients || []).map(ing => ({ id: ing.id, name: ing.name, cost: ing.cost != null ? ing.cost : null }));
-        legacyIngredients.forEach(ing => {
-          if (ing.cost != null) boughtLogSetIfMissing();
-          if (m.weekStart && ing.cost != null) { /* handled below */ }
-        });
-        if (m.weekStart){
-          (m.ingredients || []).forEach(ing => {
-            if (ing.bought) boughtLog[m.weekStart + ':' + ing.id] = true;
-          });
-        }
-        m.versions = [{ effectiveFrom: m.weekStart || currentWeekStart, ingredients: legacyIngredients }];
-        delete m.weekStart;
-        delete m.color;
-        delete m.ingredients;
       });
       const legacyPriceRaw = localStorage.getItem(LS_KEYS.legacyPrice);
       if (legacyPriceRaw){
         try {
           const legacyPrice = JSON.parse(legacyPriceRaw);
-          Object.keys(legacyPrice).forEach(k => {
-            ingredientLibrary[k] = { name: k, cost: legacyPrice[k] };
-          });
+          Object.keys(legacyPrice).forEach(k => { ingredientLibrary[k] = { name: k, cost: legacyPrice[k] }; });
         } catch(e){}
       }
-      saveTypes(); saveItems(); saveMeals(); saveBoughtLog(); saveIngredientLibrary();
+      saveTypes(); saveItems();
       localStorage.removeItem(LS_KEYS.legacyTags);
       localStorage.removeItem(LS_KEYS.legacyPrice);
     } catch(e){ /* ignore malformed legacy data */ }
   }
-  function boughtLogSetIfMissing(){}
+
+  // v0.2/v0.3 -> current: pricePerUnit -> minPrice/minUnits
+  let itemsChanged = false;
+  items.forEach(i => {
+    if (i.pricePerUnit !== undefined){
+      i.minPrice = i.pricePerUnit;
+      i.minUnits = 1;
+      delete i.pricePerUnit;
+      itemsChanged = true;
+    }
+    if (i.minPrice === undefined) i.minPrice = null;
+    if (i.minUnits === undefined) i.minUnits = 1;
+  });
+  if (itemsChanged) saveItems();
+
+  // v0.2 recurring/versioned meals -> flat per-week meals (uses legacy bought log if present)
+  const legacyBoughtLog = loadJSON(LS_KEYS.legacyBoughtLog, null);
+  let mealsChanged = false;
+  meals = meals.map(m => {
+    if (!m.versions) return m; // already flat
+    mealsChanged = true;
+    const lastVersion = m.versions[m.versions.length - 1];
+    const weekStart = lastVersion.effectiveFrom;
+    const ingredients = (lastVersion.ingredients || []).map(ing => ({
+      id: ing.id, name: ing.name, cost: ing.cost != null ? ing.cost : null,
+      bought: legacyBoughtLog ? !!legacyBoughtLog[weekStart + ':' + ing.id] : false
+    }));
+    return { id: m.id, weekStart, day: m.day, name: m.name, ingredients };
+  });
+  if (mealsChanged) saveMeals();
+
+  // extra grocery items: add inline bought flag using legacy bought log if present
+  let extrasChanged = false;
+  Object.keys(extraGroceryItems).forEach(weekStart => {
+    extraGroceryItems[weekStart] = (extraGroceryItems[weekStart] || []).map(it => {
+      if (it.bought === undefined){
+        extrasChanged = true;
+        return Object.assign({}, it, { bought: legacyBoughtLog ? !!legacyBoughtLog[weekStart + ':' + it.id] : false });
+      }
+      return it;
+    });
+  });
+  if (extrasChanged) saveExtraGroceryItems();
+
+  if (legacyBoughtLog) localStorage.removeItem(LS_KEYS.legacyBoughtLog);
 })();
 
 if (types.length === 0){
@@ -141,7 +170,6 @@ if (types.length === 0){
 function saveItems(){ localStorage.setItem(LS_KEYS.items, JSON.stringify(items)); }
 function saveTypes(){ localStorage.setItem(LS_KEYS.types, JSON.stringify(types)); }
 function saveMeals(){ localStorage.setItem(LS_KEYS.meals, JSON.stringify(meals)); }
-function saveBoughtLog(){ localStorage.setItem(LS_KEYS.boughtLog, JSON.stringify(boughtLog)); }
 function saveIngredientLibrary(){ localStorage.setItem(LS_KEYS.ingLib, JSON.stringify(ingredientLibrary)); }
 function saveExtraGroceryItems(){ localStorage.setItem(LS_KEYS.extraGrocery, JSON.stringify(extraGroceryItems)); }
 function persistCurrentWeek(){ localStorage.setItem(LS_KEYS.week, currentWeekStart); }
@@ -380,18 +408,21 @@ function saveItem(){
   if (!name){ alert('Please enter an item name.'); return; }
   const typeId = qs('item-type').value || null;
   const unit = resolveUnitFromInputs('item-unit', 'item-unit-custom');
-  const priceRaw = qs('item-price').value;
-  const pricePerUnit = priceRaw === '' ? null : Math.max(0, parseFloat(priceRaw));
+  const minPriceRaw = qs('item-min-price').value;
+  const minPrice = minPriceRaw === '' ? null : Math.max(0, parseFloat(minPriceRaw));
+  const minUnitsRaw = qs('item-min-units').value;
+  const minUnits = minUnitsRaw === '' ? 1 : Math.max(1, parseInt(minUnitsRaw, 10));
   const currentRaw = qs('item-current').value;
   const targetRaw = qs('item-target').value;
   const currentCount = currentRaw === '' ? null : Math.max(0, parseInt(currentRaw, 10));
   const targetCount = targetRaw === '' ? null : Math.max(0, parseInt(targetRaw, 10));
-  const item = { id: uid(), name, typeId, unit, pricePerUnit, currentCount, targetCount, status: 'ok' };
+  const item = { id: uid(), name, typeId, unit, minPrice, minUnits, currentCount, targetCount, status: 'ok' };
   recomputeStatus(item);
   items.push(item);
   saveItems();
   qs('item-name').value = '';
-  qs('item-price').value = '';
+  qs('item-min-price').value = '';
+  qs('item-min-units').value = '';
   qs('item-current').value = '';
   qs('item-target').value = '';
   qs('item-unit').value = 'piece';
@@ -444,7 +475,8 @@ function editItem(id){
   qs('edit-item-unit').value = isPreset ? item.unit : 'custom';
   qs('edit-item-unit-custom').style.display = isPreset ? 'none' : 'block';
   qs('edit-item-unit-custom').value = isPreset ? '' : item.unit;
-  qs('edit-item-price').value = item.pricePerUnit != null ? item.pricePerUnit : '';
+  qs('edit-item-min-price').value = item.minPrice != null ? item.minPrice : '';
+  qs('edit-item-min-units').value = (item.minUnits != null && item.minUnits !== 1) ? item.minUnits : '';
   qs('edit-item-current').value = item.currentCount != null ? item.currentCount : '';
   qs('edit-item-target').value = item.targetCount != null ? item.targetCount : '';
   qs('item-modal-overlay').classList.remove('hidden');
@@ -458,8 +490,10 @@ function updateItem(){
   item.name = qs('edit-item-name').value.trim() || item.name;
   item.typeId = qs('edit-item-type').value || null;
   item.unit = resolveUnitFromInputs('edit-item-unit', 'edit-item-unit-custom');
-  const priceRaw = qs('edit-item-price').value;
-  item.pricePerUnit = priceRaw === '' ? null : Math.max(0, parseFloat(priceRaw));
+  const minPriceRaw = qs('edit-item-min-price').value;
+  item.minPrice = minPriceRaw === '' ? null : Math.max(0, parseFloat(minPriceRaw));
+  const minUnitsRaw = qs('edit-item-min-units').value;
+  item.minUnits = minUnitsRaw === '' ? 1 : Math.max(1, parseInt(minUnitsRaw, 10));
   const currentRaw = qs('edit-item-current').value;
   const targetRaw = qs('edit-item-target').value;
   item.currentCount = currentRaw === '' ? null : Math.max(0, parseInt(currentRaw, 10));
@@ -533,8 +567,10 @@ function renderItemCardHtml(item, typeColor){
   const countHtml = (item.currentCount != null)
     ? `<span class="pantry-count"><strong>${item.currentCount}</strong>${item.targetCount != null ? ' / ' + item.targetCount : ''} ${unitLabel}</span>`
     : '';
-  const priceHtml = (item.pricePerUnit != null)
-    ? `<span class="pantry-count">₱${formatMoney(item.pricePerUnit)} / ${unitLabel}</span>`
+  const priceHtml = (item.minPrice != null)
+    ? (item.minUnits && item.minUnits > 1
+        ? `<span class="pantry-count">₱${formatMoney(item.minPrice)} per ${item.minUnits} ${unitLabel}</span>`
+        : `<span class="pantry-count">₱${formatMoney(item.minPrice)} / ${unitLabel}</span>`)
     : '';
   const trackedActions = (item.currentCount != null)
     ? `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">− Used</button>
@@ -557,8 +593,8 @@ function renderItemCardHtml(item, typeColor){
         <button class="btn-pantry-action warn" onclick="toggleStatus('${item.id}','low')">${item.status === 'low' ? 'Undo Refill' : 'Needs Refill'}</button>
         <button class="btn-pantry-action danger" onclick="toggleStatus('${item.id}','out')">${item.status === 'out' ? 'Back In Stock' : 'Out of Stock'}</button>
         <span style="flex:1;"></span>
-        <button class="icon-btn" onclick="editItem('${item.id}')" title="Edit">✎</button>
-        <button class="icon-btn" onclick="deleteItemInline('${item.id}')" title="Delete">🗑</button>
+        <button class="icon-btn" onclick="editItem('${item.id}')" title="Edit">${ICON_EDIT}</button>
+        <button class="icon-btn" onclick="deleteItemInline('${item.id}')" title="Delete">${ICON_TRASH}</button>
       </div>
     </div>`;
 }
@@ -577,24 +613,36 @@ function neededQtyForItem(item, mode){
   return needsRestock ? 1 : 0;
 }
 
+/* Cost to acquire `qty` units of an item, respecting bulk/minimum-purchase
+   pricing: you can only buy in batches of `minUnits` at `minPrice` each. */
+function batchCostForQty(item, qty){
+  if (qty <= 0 || item.minPrice == null) return 0;
+  const units = (item.minUnits && item.minUnits > 0) ? item.minUnits : 1;
+  const batches = Math.ceil(qty / units);
+  return batches * item.minPrice;
+}
+
 function renderRestockEstimate(){
   const filterTypeId = qs('restock-type-filter').value;
   const relevant = items.filter(i => filterTypeId === 'all' || i.typeId === filterTypeId);
   let minCost = 0, maxCost = 0;
   relevant.forEach(i => {
-    const price = i.pricePerUnit || 0;
-    minCost += neededQtyForItem(i, 'min') * price;
-    maxCost += neededQtyForItem(i, 'max') * price;
+    minCost += batchCostForQty(i, neededQtyForItem(i, 'min'));
+    maxCost += batchCostForQty(i, neededQtyForItem(i, 'max'));
   });
   qs('restock-min-cost').textContent = '₱' + formatMoney(minCost);
   qs('restock-max-cost').textContent = '₱' + formatMoney(maxCost);
 }
 
-/* ═══════════════════════════ MEAL PLANNER ═══════════════════════════ */
+/* ═══════════════════════════ MEAL PLANNER ═══════════════════════════
+   Meals belong to exactly one week (no recurrence). Each ingredient
+   carries its own bought flag directly. */
 function renderPlanner(){
   renderWeekNav();
   renderMealWeekList();
   renderGroceryList();
+  renderPastMealsDropdown();
+  renderIngredientLibraryDropdown();
 }
 
 function renderWeekNav(){
@@ -615,34 +663,13 @@ function goToThisWeek(){
   renderPlanner();
 }
 
-/* Returns the ingredient version applicable to a given week (the most
-   recent version whose effectiveFrom <= weekStart), or null if the meal
-   didn't exist yet that week. */
-function getVersionForWeek(meal, weekStart){
-  let chosen = null;
-  for (const v of meal.versions){
-    if (v.effectiveFrom <= weekStart) chosen = v;
-    else break;
-  }
-  return chosen;
+function mealsForCurrentWeek(){
+  return meals.filter(m => m.weekStart === currentWeekStart);
 }
 
-/* Edits ingredients starting from `weekStart` forward. Past versions
-   (effectiveFrom < weekStart) are preserved untouched; any version dated
-   on/after weekStart is superseded by this edit. */
-function setIngredientsForWeek(meal, weekStart, ingredients){
-  meal.versions = meal.versions.filter(v => v.effectiveFrom < weekStart);
-  meal.versions.push({ effectiveFrom: weekStart, ingredients });
-  meal.versions.sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-}
-
-function mealsVisibleForWeek(weekStart){
-  return meals.filter(m => m.versions.length > 0 && m.versions[0].effectiveFrom <= weekStart);
-}
-
-function computeMealStats(ingredients, weekStart){
-  const total = ingredients.length;
-  const bought = ingredients.filter(ing => !!boughtLog[weekStart + ':' + ing.id]).length;
+function computeMealStats(meal){
+  const total = meal.ingredients.length;
+  const bought = meal.ingredients.filter(ing => !!ing.bought).length;
   let status, label;
   if (total === 0){ status = 'none'; label = 'No Ingredients'; }
   else if (bought === total){ status = 'complete'; label = 'Complete'; }
@@ -653,7 +680,7 @@ function computeMealStats(ingredients, weekStart){
 
 function renderMealWeekList(){
   const wrap = qs('meal-week-list');
-  const weekMeals = mealsVisibleForWeek(currentWeekStart);
+  const weekMeals = mealsForCurrentWeek();
   if (weekMeals.length === 0){
     wrap.innerHTML = '<p class="empty-msg">No meals planned for this week yet.</p>';
     return;
@@ -673,13 +700,10 @@ function renderMealWeekList(){
 }
 
 function renderMealCardHtml(meal){
-  const version = getVersionForWeek(meal, currentWeekStart);
-  const ingredients = version ? version.ingredients : [];
-  const stats = computeMealStats(ingredients, currentWeekStart);
-  const chips = ingredients.map(ing => {
-    const bought = !!boughtLog[currentWeekStart + ':' + ing.id];
-    return `<label class="ing-chip ${bought ? 'bought' : ''}">
-      <input type="checkbox" ${bought ? 'checked' : ''} onchange="toggleIngredientBought('${ing.id}')" />
+  const stats = computeMealStats(meal);
+  const chips = meal.ingredients.map(ing => {
+    return `<label class="ing-chip ${ing.bought ? 'bought' : ''}">
+      <input type="checkbox" ${ing.bought ? 'checked' : ''} onchange="toggleIngredientBought('${meal.id}','${ing.id}')" />
       ${esc(ing.name)}${ing.cost != null ? ` <span class="ing-cost">₱${formatMoney(ing.cost)}</span>` : ''}
     </label>`;
   }).join('');
@@ -700,33 +724,39 @@ function renderMealCardHtml(meal){
     </div>`;
 }
 
-function toggleIngredientBought(ingId){
-  const key = currentWeekStart + ':' + ingId;
-  boughtLog[key] = !boughtLog[key];
-  saveBoughtLog();
+function toggleIngredientBought(mealId, ingId){
+  const meal = meals.find(m => m.id === mealId);
+  if (!meal) return;
+  const ing = meal.ingredients.find(i => i.id === ingId);
+  if (!ing) return;
+  ing.bought = !ing.bought;
+  saveMeals();
   renderMealWeekList();
   renderGroceryList();
 }
 
+function toggleExtraBought(extraId){
+  const list = extraGroceryItems[currentWeekStart] || [];
+  const item = list.find(i => i.id === extraId);
+  if (!item) return;
+  item.bought = !item.bought;
+  saveExtraGroceryItems();
+  renderGroceryList();
+}
+
 function renderGroceryList(){
-  const weekMeals = mealsVisibleForWeek(currentWeekStart).slice().sort((a, b) => a.day - b.day);
+  const weekMeals = mealsForCurrentWeek().slice().sort((a, b) => a.day - b.day);
   const rows = [];
   weekMeals.forEach(m => {
-    const version = getVersionForWeek(m, currentWeekStart);
-    const ingredients = version ? version.ingredients : [];
-    ingredients.forEach(ing => rows.push({ mealName: m.name, ing, extra: false }));
+    m.ingredients.forEach(ing => rows.push({ mealName: m.name, ing, mealId: m.id, extra: false }));
   });
   const extras = extraGroceryItems[currentWeekStart] || [];
   extras.forEach(ing => rows.push({ mealName: 'Other', ing, extra: true }));
 
-  rows.sort((a, b) => {
-    const aBought = !!boughtLog[currentWeekStart + ':' + a.ing.id];
-    const bBought = !!boughtLog[currentWeekStart + ':' + b.ing.id];
-    return (aBought ? 1 : 0) - (bBought ? 1 : 0);
-  });
+  rows.sort((a, b) => (a.ing.bought ? 1 : 0) - (b.ing.bought ? 1 : 0));
 
   const totalCost = rows.reduce((s, r) => s + (r.ing.cost || 0), 0);
-  const boughtCost = rows.filter(r => boughtLog[currentWeekStart + ':' + r.ing.id]).reduce((s, r) => s + (r.ing.cost || 0), 0);
+  const boughtCost = rows.filter(r => r.ing.bought).reduce((s, r) => s + (r.ing.cost || 0), 0);
   const remainingCost = totalCost - boughtCost;
   qs('grocery-total-cost').textContent = '₱' + formatMoney(totalCost);
   qs('grocery-bought-cost').textContent = '₱' + formatMoney(boughtCost);
@@ -738,13 +768,13 @@ function renderGroceryList(){
     return;
   }
   wrap.innerHTML = rows.map(r => {
-    const bought = !!boughtLog[currentWeekStart + ':' + r.ing.id];
+    const toggleCall = r.extra ? `toggleExtraBought('${r.ing.id}')` : `toggleIngredientBought('${r.mealId}','${r.ing.id}')`;
     const deleteBtn = r.extra
-      ? `<button class="icon-btn" onclick="deleteExtraGroceryItem('${r.ing.id}')" title="Remove">🗑</button>`
+      ? `<button class="icon-btn" onclick="deleteExtraGroceryItem('${r.ing.id}')" title="Remove">${ICON_TRASH}</button>`
       : '';
     return `
-    <div class="grocery-item ${bought ? 'bought' : ''}">
-      <input type="checkbox" ${bought ? 'checked' : ''} onchange="toggleIngredientBought('${r.ing.id}')" />
+    <div class="grocery-item ${r.ing.bought ? 'bought' : ''}">
+      <input type="checkbox" ${r.ing.bought ? 'checked' : ''} onchange="${toggleCall}" />
       <div class="grocery-item-info">
         <div class="grocery-item-name">${esc(r.ing.name)}</div>
         <div class="grocery-item-meal">${esc(r.mealName)}</div>
@@ -765,19 +795,18 @@ function addExtraGroceryItem(){
     saveIngredientLibrary();
   }
   if (!extraGroceryItems[currentWeekStart]) extraGroceryItems[currentWeekStart] = [];
-  extraGroceryItems[currentWeekStart].push({ id: uid(), name, cost });
+  extraGroceryItems[currentWeekStart].push({ id: uid(), name, cost, bought: false });
   saveExtraGroceryItems();
   qs('grocery-extra-name').value = '';
   qs('grocery-extra-cost').value = '';
   renderGroceryList();
+  renderIngredientLibraryDropdown();
 }
 
 function deleteExtraGroceryItem(id){
   const list = extraGroceryItems[currentWeekStart] || [];
   extraGroceryItems[currentWeekStart] = list.filter(i => i.id !== id);
-  delete boughtLog[currentWeekStart + ':' + id];
   saveExtraGroceryItems();
-  saveBoughtLog();
   renderGroceryList();
 }
 
@@ -792,7 +821,6 @@ function openMealModal(){
   qs('editing-meal-id').value = '';
   qs('meal-name').value = '';
   qs('meal-day').value = '0';
-  qs('meal-effective-note').style.display = 'none';
   qs('meal-ingredient-list').innerHTML = '';
   refreshIngredientSuggestions();
   addIngredientRow();
@@ -810,7 +838,7 @@ function addIngredientRow(name = '', cost = null, ingId = null){
   row.innerHTML = `
     <input type="text" class="ing-name-input" list="ingredient-suggestions" placeholder="e.g. Chicken thighs" value="${esc(name)}" oninput="onIngredientNameInput(this)" />
     <input type="number" class="ing-cost-input" placeholder="₱ cost" min="0" step="0.01" value="${cost != null ? cost : ''}" />
-    <button type="button" class="icon-btn" onclick="this.closest('.ingredient-row').remove()" title="Remove">✕</button>
+    <button type="button" class="icon-btn" onclick="this.closest('.ingredient-row').remove()" title="Remove">${ICON_CLOSE}</button>
   `;
   list.appendChild(row);
 }
@@ -831,17 +859,10 @@ function editMeal(id){
   qs('editing-meal-id').value = meal.id;
   qs('meal-name').value = meal.name;
   qs('meal-day').value = String(meal.day);
-
-  const note = qs('meal-effective-note');
-  note.style.display = 'block';
-  note.textContent = 'Ingredient changes apply from ' + formatWeekRange(currentWeekStart) + ' forward. Earlier weeks keep their original list.';
-
   qs('meal-ingredient-list').innerHTML = '';
   refreshIngredientSuggestions();
-  const version = getVersionForWeek(meal, currentWeekStart);
-  const ingredients = version ? version.ingredients : [];
-  if (ingredients.length === 0) addIngredientRow();
-  else ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id));
+  if (meal.ingredients.length === 0) addIngredientRow();
+  else meal.ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id));
   qs('meal-delete-btn').style.display = 'block';
   qs('meal-modal-overlay').classList.remove('hidden');
 }
@@ -861,9 +882,9 @@ function saveMeal(){
   const name = qs('meal-name').value.trim();
   if (!name){ alert('Please enter a meal name.'); return; }
   const day = parseInt(qs('meal-day').value, 10);
-  const ingredients = collectIngredientsFromModal();
+  const collected = collectIngredientsFromModal();
 
-  ingredients.forEach(ing => {
+  collected.forEach(ing => {
     if (ing.cost != null){
       ingredientLibrary[ing.name.trim().toLowerCase()] = { name: ing.name.trim(), cost: ing.cost };
     }
@@ -874,12 +895,17 @@ function saveMeal(){
   if (editingId){
     const meal = meals.find(m => m.id === editingId);
     if (meal){
+      const oldIngredients = meal.ingredients;
       meal.name = name;
       meal.day = day;
-      setIngredientsForWeek(meal, currentWeekStart, ingredients);
+      meal.ingredients = collected.map(ni => {
+        const old = oldIngredients.find(oi => oi.id === ni.id);
+        return { id: ni.id, name: ni.name, cost: ni.cost, bought: old ? !!old.bought : false };
+      });
     }
   } else {
-    meals.push({ id: uid(), day, name, versions: [{ effectiveFrom: currentWeekStart, ingredients }] });
+    const ingredients = collected.map(ing => Object.assign({ bought: false }, ing));
+    meals.push({ id: uid(), weekStart: currentWeekStart, day, name, ingredients });
   }
   saveMeals();
   closeMealModal();
@@ -889,7 +915,7 @@ function saveMeal(){
 function deleteMeal(){
   const id = qs('editing-meal-id').value;
   if (!id) return;
-  if (!confirm('Delete this meal and all its planned occurrences?')) return;
+  if (!confirm('Delete this meal?')) return;
   meals = meals.filter(m => m.id !== id);
   saveMeals();
   closeMealModal();
@@ -897,10 +923,77 @@ function deleteMeal(){
 }
 
 function deleteMealInline(id){
-  if (!confirm('Delete this meal and all its planned occurrences?')) return;
+  if (!confirm('Delete this meal?')) return;
   meals = meals.filter(m => m.id !== id);
   saveMeals();
   renderPlanner();
+}
+
+/* ─── REUSE A PAST MEAL ─── */
+function renderPastMealsDropdown(){
+  const wrap = qs('past-meals-list');
+  if (!wrap) return;
+  const search = (qs('past-meal-search').value || '').trim().toLowerCase();
+  const pastMeals = meals
+    .filter(m => m.weekStart < currentWeekStart)
+    .filter(m => !search || m.name.toLowerCase().includes(search))
+    .sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+
+  if (pastMeals.length === 0){
+    wrap.innerHTML = '<p class="empty-msg">No past meals yet.</p>';
+    return;
+  }
+  wrap.innerHTML = pastMeals.map(m => `
+    <div class="reuse-item">
+      <div class="reuse-item-info">
+        <div class="reuse-item-name">${esc(m.name)}</div>
+        <div class="reuse-item-meta">${formatWeekRange(m.weekStart)} · ${m.ingredients.length} ingredient${m.ingredients.length === 1 ? '' : 's'}</div>
+      </div>
+      <button class="btn-sm btn-edit" onclick="reuseMeal('${m.id}')">Add to This Week</button>
+    </div>
+  `).join('');
+}
+
+function reuseMeal(id){
+  const meal = meals.find(m => m.id === id);
+  if (!meal) return;
+  const ingredients = meal.ingredients.map(ing => ({ id: uid(), name: ing.name, cost: ing.cost, bought: false }));
+  meals.push({ id: uid(), weekStart: currentWeekStart, day: meal.day, name: meal.name, ingredients });
+  saveMeals();
+  renderPlanner();
+}
+
+/* ─── ALL INGREDIENTS (LIBRARY) ─── */
+function renderIngredientLibraryDropdown(){
+  const wrap = qs('ingredient-library-list');
+  if (!wrap) return;
+  const search = (qs('ingredient-library-search').value || '').trim().toLowerCase();
+  const entries = Object.values(ingredientLibrary)
+    .filter(e => !search || e.name.toLowerCase().includes(search))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (entries.length === 0){
+    wrap.innerHTML = '<p class="empty-msg">No ingredients saved yet.</p>';
+    return;
+  }
+  wrap.innerHTML = entries.map(e => `
+    <div class="library-item">
+      <div class="library-item-info">
+        <div class="library-item-name">${esc(e.name)}</div>
+        <div class="library-item-meta">${e.cost != null ? '₱' + formatMoney(e.cost) : 'No saved price'}</div>
+      </div>
+      <button class="btn-sm btn-edit" onclick="addLibraryIngredientToGrocery('${esc(e.name).replace(/'/g, "\\'")}')">Add to List</button>
+    </div>
+  `).join('');
+}
+
+function addLibraryIngredientToGrocery(name){
+  const entry = ingredientLibrary[name.toLowerCase()];
+  const cost = entry ? entry.cost : null;
+  if (!extraGroceryItems[currentWeekStart]) extraGroceryItems[currentWeekStart] = [];
+  extraGroceryItems[currentWeekStart].push({ id: uid(), name, cost, bought: false });
+  saveExtraGroceryItems();
+  renderGroceryList();
 }
 
 /* ─── CALENDAR / WEEK PICKER ─── */
@@ -923,9 +1016,7 @@ function renderCalendar(){
   const todayISO = toISODate(new Date());
   const selStartISO = currentWeekStart;
   const selEndISO = toISODate(addDays(fromISODate(currentWeekStart), 6));
-
-  const weeksWithData = new Set();
-  meals.forEach(m => m.versions.forEach(v => weeksWithData.add(v.effectiveFrom)));
+  const weeksWithData = new Set(meals.map(m => m.weekStart));
 
   let html = '';
   for (let i = 0; i < firstWeekday; i++) html += '<span class="cal-empty"></span>';
@@ -938,7 +1029,7 @@ function renderCalendar(){
     if (iso === selStartISO) classes.push('week-start');
     if (iso === selEndISO) classes.push('week-end');
     const dayMonday = toISODate(getMonday(dateObj));
-    if (weeksWithData.has(dayMonday) || mealsVisibleForWeek(dayMonday).length > 0) classes.push('has-data');
+    if (weeksWithData.has(dayMonday)) classes.push('has-data');
     html += `<span class="${classes.join(' ')}" onclick="selectWeekFromDate('${iso}')">${d}</span>`;
   }
   qs('cal-grid').innerHTML = html;
@@ -956,7 +1047,7 @@ function openSettings(){ renderThemeSwatches(); qs('settings-overlay').classList
 function closeSettings(){ qs('settings-overlay').classList.add('hidden'); }
 
 function exportData(){
-  const payload = { items, types, meals, boughtLog, ingredientLibrary, extraGroceryItems, exportedAt: new Date().toISOString(), version: 'stashimo-v0.2' };
+  const payload = { items, types, meals, ingredientLibrary, extraGroceryItems, exportedAt: new Date().toISOString(), version: 'stashimo-v0.3' };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -983,10 +1074,9 @@ function importData(event){
       items = data.items;
       types = data.types;
       meals = data.meals;
-      boughtLog = data.boughtLog || {};
       ingredientLibrary = data.ingredientLibrary || {};
       extraGroceryItems = data.extraGroceryItems || {};
-      saveItems(); saveTypes(); saveMeals(); saveBoughtLog(); saveIngredientLibrary(); saveExtraGroceryItems();
+      saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
       refreshTypeSelects();
       renderPantry();
       renderRestockEstimate();
@@ -1005,11 +1095,10 @@ function resetAllData(){
   if (!confirm('This will permanently erase all supplies, types, and meal plans. Continue?')) return;
   items = [];
   meals = [];
-  boughtLog = {};
   ingredientLibrary = {};
   extraGroceryItems = {};
   types = [{ id: uid(), name: 'Food', color: COLOR_PALETTE[0] }];
-  saveItems(); saveTypes(); saveMeals(); saveBoughtLog(); saveIngredientLibrary(); saveExtraGroceryItems();
+  saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
   refreshTypeSelects();
   renderPantry();
   renderRestockEstimate();

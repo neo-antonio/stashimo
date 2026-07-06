@@ -210,7 +210,7 @@ button:active { transform: scale(0.97); }
 .btn-pantry-action.warn { color: var(--warning); }
 .btn-pantry-action.warn:hover { background: var(--warning); color: #fff; }
 .pantry-item-icons { display: flex; gap: 4px; flex-shrink: 0; }
-.icon-btn { background: none; color: var(--text-dim); border: none; box-shadow: none; padding: 2px 5px; font-size: 13px; }
+.icon-btn { background: none; color: var(--text-dim); border: none; box-shadow: none; padding: 4px 6px; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn:hover { color: var(--text); opacity: 1; box-shadow: none; }
 
 /* ─── LIBRARY-STYLE HEADER ROW ─── */
@@ -289,7 +289,7 @@ button:active { transform: scale(0.97); }
 .day-group-date { font-size: 11px; color: var(--text-dim); }
 
 /* ─── MEAL CARD ─── */
-.meal-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.meal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
 .meal-card:last-child { margin-bottom: 0; }
 .meal-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .meal-name { font-size: 14px; font-weight: 700; color: var(--text); }
@@ -332,6 +332,28 @@ button:active { transform: scale(0.97); }
 .meal-status.partial { background: var(--warning-dim); color: var(--warning); }
 .meal-status.missing { background: var(--danger-dim); color: var(--danger); }
 .meal-status.none { background: var(--accent-dim); color: var(--text-dim); }
+
+/* ─── DROPDOWN CARDS (Reuse Past Meal / All Ingredients) ─── */
+.dropdown-card summary {
+  cursor: pointer; font-size: 15px; font-weight: 700; color: var(--text); list-style: none;
+  display: flex; align-items: center; justify-content: space-between; padding: 2px 0;
+}
+.dropdown-card summary::-webkit-details-marker { display: none; }
+.dropdown-card summary::after {
+  content: ''; width: 9px; height: 9px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg); transition: transform 0.2s; flex-shrink: 0; margin-left: 10px;
+}
+.dropdown-card[open] summary::after { transform: rotate(-135deg); }
+.dropdown-body { margin-top: 14px; }
+.dropdown-body input[type="text"] { margin-bottom: 12px; }
+.reuse-item, .library-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--input-border);
+}
+.reuse-item:last-child, .library-item:last-child { border-bottom: none; }
+.reuse-item-info, .library-item-info { min-width: 0; flex: 1; }
+.reuse-item-name, .library-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.reuse-item-meta, .library-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* ─── THEME PICKER ─── */
 .theme-swatch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
