@@ -84,7 +84,7 @@
             <input type="number" id="item-target" placeholder="e.g. 5" min="0" />
           </div>
         </div>
-        <p class="card-desc" style="padding:0 0 12px; margin-top:-10px;">If this item can only be bought in bulk (e.g. ₱300 for a pack of 6), enter the pack price and quantity — leave Min Units blank for a plain per-unit price.</p>
+        <p class="card-desc" style="padding:0 0 12px; margin-top:-10px;">If this item can only be bought in bulk (e.g. ₱300 for a pack of 6), enter the pack price and quantity. Leave Min Units blank for a plain per-unit price.</p>
         <div style="display:flex; gap:8px;">
           <button id="save-item-btn" onclick="saveItem()" style="flex:1;">Save Item</button>
           <button class="btn-secondary" onclick="openTypeModal()" style="flex-shrink:0;">+ Type</button>
@@ -136,12 +136,12 @@
 
       <section class="card">
         <div class="week-nav">
-          <button onclick="changeWeek(-1)">‹</button>
+          <button class="week-nav-arrow" onclick="changeWeek(-1)">‹</button>
           <div class="week-nav-label" id="week-nav-label" onclick="openCalendar()">
-            <div class="week-range" id="week-range-text">—</div>
+            <div class="week-range" id="week-range-text">Loading...</div>
             <div class="week-sub" id="week-sub-text">Tap to pick a week</div>
           </div>
-          <button onclick="changeWeek(1)">›</button>
+          <button class="week-nav-arrow" onclick="changeWeek(1)">›</button>
         </div>
         <div class="week-actions">
           <button class="btn-secondary" onclick="openCalendar()">Pick Week</button>
@@ -177,7 +177,7 @@
           </div>
         </div>
         <div id="grocery-list">
-          <p class="empty-msg">Nothing to buy yet — plan a meal first.</p>
+          <p class="empty-msg">Nothing to buy yet. Plan a meal first.</p>
         </div>
         <div class="grocery-add-row" style="margin-top:14px; margin-bottom:0;">
           <input type="text" id="grocery-extra-name" placeholder="Add an item not tied to a meal…" list="ingredient-suggestions" />
@@ -392,7 +392,7 @@
         <div class="tutorial-step" id="tut-step-1">
           <h3>Meal Planner</h3>
           <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal shows whether its ingredients are complete, partial, or missing.</p>
-          <p style="margin-top:10px;">Meals belong to one week only — pick which day they're for. Reuse a past meal or grab a saved ingredient anytime from the dropdowns below the Grocery List. Check off items as you shop.</p>
+          <p style="margin-top:10px;">Meals belong to one week only. Pick which day they're for. Reuse a past meal or grab a saved ingredient anytime from the dropdowns below the Grocery List. Check off items as you shop.</p>
         </div>
       </div>
       <div class="tutorial-dots">
@@ -424,7 +424,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.3</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.4</p>
   </footer>
 
 </body>

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════
-   STASHIMO v0.3 — Supplies Tracker & Meal Planner
+   STASHIMO v0.3: Supplies Tracker & Meal Planner
    All data stored locally on-device via localStorage.
    ══════════════════════════════════════════════════════ */
 
@@ -9,7 +9,7 @@ const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>';
 
 /* ─── CONSTANTS ─── */
-// Distinct hues only — no near-duplicate purples/greens/blues.
+// Distinct hues only, no near-duplicate purples/greens/blues.
 const COLOR_PALETTE = [
   '#23272f', '#ffffff', '#e08283', '#e0a458', '#e0c15c',
   '#7fb08f', '#5fa8a0', '#6f9bd6', '#7b7fd6', '#a67bd6', '#d67ba0', '#b08a6b'
@@ -764,7 +764,7 @@ function renderGroceryList(){
 
   const wrap = qs('grocery-list');
   if (rows.length === 0){
-    wrap.innerHTML = '<p class="empty-msg">Nothing to buy yet — plan a meal first, or add an item below.</p>';
+    wrap.innerHTML = '<p class="empty-msg">Nothing to buy yet. Plan a meal first, or add an item below.</p>';
     return;
   }
   wrap.innerHTML = rows.map(r => {
@@ -779,7 +779,7 @@ function renderGroceryList(){
         <div class="grocery-item-name">${esc(r.ing.name)}</div>
         <div class="grocery-item-meal">${esc(r.mealName)}</div>
       </div>
-      <div class="grocery-item-cost">${r.ing.cost != null ? '₱' + formatMoney(r.ing.cost) : '—'}</div>
+      <div class="grocery-item-cost">${r.ing.cost != null ? '₱' + formatMoney(r.ing.cost) : '-'}</div>
       ${deleteBtn}
     </div>`;
   }).join('');
@@ -982,9 +982,36 @@ function renderIngredientLibraryDropdown(){
         <div class="library-item-name">${esc(e.name)}</div>
         <div class="library-item-meta">${e.cost != null ? '₱' + formatMoney(e.cost) : 'No saved price'}</div>
       </div>
-      <button class="btn-sm btn-edit" onclick="addLibraryIngredientToGrocery('${esc(e.name).replace(/'/g, "\\'")}')">Add to List</button>
+      <div style="display:flex; gap:6px; flex-shrink:0;">
+        <button class="btn-sm btn-edit" onclick="addLibraryIngredientToGrocery('${esc(e.name).replace(/'/g, "\\'")}')">Add to List</button>
+        <button class="icon-btn" onclick="deleteLibraryIngredient('${esc(e.name).replace(/'/g, "\\'")}')" title="Delete">${ICON_TRASH}</button>
+      </div>
     </div>
   `).join('');
+}
+
+function deleteLibraryIngredient(name){
+  const key = name.toLowerCase();
+  if (!confirm(`Delete "${name}" from your saved ingredient list?`)) return;
+  const deleteEverywhere = confirm(
+    `Also remove "${name}" from every meal and week where it was already added?\n\n` +
+    `OK = delete it everywhere\n` +
+    `Cancel = just remove it from this saved list (existing meals keep it)`
+  );
+  delete ingredientLibrary[key];
+  saveIngredientLibrary();
+  if (deleteEverywhere){
+    meals.forEach(m => { m.ingredients = m.ingredients.filter(ing => ing.name.toLowerCase() !== key); });
+    saveMeals();
+    Object.keys(extraGroceryItems).forEach(w => {
+      extraGroceryItems[w] = (extraGroceryItems[w] || []).filter(ing => ing.name.toLowerCase() !== key);
+    });
+    saveExtraGroceryItems();
+    renderMealWeekList();
+    renderGroceryList();
+  }
+  renderIngredientLibraryDropdown();
+  refreshIngredientSuggestions();
 }
 
 function addLibraryIngredientToGrocery(name){
