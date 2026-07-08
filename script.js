@@ -9,10 +9,10 @@ const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>';
 
 /* ─── CONSTANTS ─── */
-// Distinct hues only, no near-duplicate purples/greens/blues.
+// Distinct hues only, no near-duplicate purples/greens/blues, ordered as a clean spectrum.
 const COLOR_PALETTE = [
-  '#23272f', '#ffffff', '#e08283', '#e0a458', '#e0c15c',
-  '#7fb08f', '#5fa8a0', '#6f9bd6', '#7b7fd6', '#a67bd6', '#d67ba0', '#b08a6b'
+  '#23272f', '#ffffff', '#e0726f', '#e0a458', '#d9c25c',
+  '#7fb08f', '#4fa8a6', '#6f9bd6', '#8b7fd6', '#c77bc9'
 ];
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const UNIT_PRESETS = ['piece','pack','bottle','box','can','kg','g','liter','ml'];
@@ -26,6 +26,7 @@ const LS_KEYS = {
   week: 'stashimo_current_week',
   theme: 'stashimo_theme',
   tut: 'stashimo_tutorial_seen',
+  pantryExpanded: 'stashimo_pantry_expanded',
   // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
   legacyPrice: 'stashimo_price_memory',
@@ -87,6 +88,8 @@ let extraGroceryItems = loadJSON(LS_KEYS.extraGrocery, {}); // { weekStart: [{id
 let currentWeekStart = localStorage.getItem(LS_KEYS.week) || toISODate(getMonday(new Date()));
 let currentTheme = localStorage.getItem(LS_KEYS.theme) || 'slate';
 let pantryFilter = 'all';
+let pantryExpanded = localStorage.getItem(LS_KEYS.pantryExpanded) === '1';
+let selectedTypeFilters = null; // Set of type ids (+ 'none' for orphans) currently shown; null = not yet initialized
 let calViewDate = fromISODate(currentWeekStart);
 let tutStep = 0;
 
@@ -127,6 +130,15 @@ let tutStep = 0;
     }
     if (i.minPrice === undefined) i.minPrice = null;
     if (i.minUnits === undefined) i.minUnits = 1;
+    // "Percent" used to be a unit choice; now it's a separate checkbox so the
+    // real unit name (bottle, tube, etc.) stays editable.
+    if (i.unit === 'percent'){
+      i.unit = 'piece';
+      i.trackPercent = true;
+      itemsChanged = true;
+    }
+    if (i.trackPercent === undefined) i.trackPercent = false;
+    if (i.lastUnitPercent === undefined) i.lastUnitPercent = 100;
   });
   if (itemsChanged) saveItems();
 
@@ -192,6 +204,21 @@ function onUnitSelectChange(selectId, customInputId){
   const sel = qs(selectId);
   const customInput = qs(customInputId);
   customInput.style.display = (sel.value === 'custom') ? 'block' : 'none';
+}
+
+/* ─── "Measure percent of last stock" checkbox toggle ─── */
+function onTrackPercentChange(checkboxId, percentFieldId){
+  const checked = qs(checkboxId).checked;
+  const percentField = qs(percentFieldId);
+  if (percentField) percentField.style.display = checked ? 'block' : 'none';
+}
+
+/* ─── COLLAPSIBLE SECTIONS (Reuse Past Meal / All Ingredients / Type Filter) ─── */
+function toggleCollapsible(bodyId, chevronId){
+  const body = qs(bodyId);
+  const chevron = qs(chevronId);
+  const nowHidden = body.classList.toggle('hidden');
+  if (chevron) chevron.classList.toggle('open', !nowHidden);
 }
 
 /* ═══════════════════════════ THEMES ═══════════════════════════ */
@@ -361,7 +388,9 @@ function saveType(){
     const t = types.find(x => x.id === editingId);
     if (t){ t.name = name; t.color = color; }
   } else {
-    types.push({ id: uid(), name, color });
+    const newType = { id: uid(), name, color };
+    types.push(newType);
+    if (selectedTypeFilters) selectedTypeFilters.add(newType.id);
   }
   saveTypes();
   qs('new-type-name').value = '';
@@ -370,6 +399,7 @@ function saveType(){
   renderColorGrid('new-type-color-grid', COLOR_PALETTE[2]);
   renderTypeList();
   refreshTypeSelects();
+  renderTypeFilterCheckboxes();
   renderPantry();
   renderRestockEstimate();
 }
@@ -378,20 +408,57 @@ function deleteTypeConfirm(id){
   if (!confirm('Delete this type? Items using it will move to "Other".')) return;
   items.forEach(i => { if (i.typeId === id) i.typeId = null; });
   types = types.filter(t => t.id !== id);
+  if (selectedTypeFilters) selectedTypeFilters.delete(id);
   saveTypes(); saveItems();
   renderTypeList();
   refreshTypeSelects();
+  renderTypeFilterCheckboxes();
   renderPantry();
   renderRestockEstimate();
 }
 
 /* ═══════════════════════════ SUPPLIES (PANTRY) ═══════════════════════════ */
 function recomputeStatus(item){
-  if (item.currentCount != null){
-    if (item.currentCount <= 0) item.status = 'out';
-    else if (item.targetCount != null && item.currentCount < item.targetCount) item.status = 'low';
+  if (item.currentCount == null) return;
+
+  if (item.trackPercent){
+    if (item.currentCount <= 0){ item.status = 'out'; return; }
+    if (item.currentCount >= 2){
+      // Percent only tracks the LAST unit. With 2+ in stock it never drops below 100%.
+      item.lastUnitPercent = 100;
+      item.status = 'ok';
+      return;
+    }
+    // Exactly 1 unit left: this is where percent tracking actually applies.
+    if (item.lastUnitPercent == null) item.lastUnitPercent = 100;
+    const target = item.targetPercent != null ? item.targetPercent : 20;
+    if (item.lastUnitPercent <= 0) item.status = 'out';
+    else if (item.lastUnitPercent < target) item.status = 'low';
     else item.status = 'ok';
+    return;
   }
+
+  if (item.currentCount <= 0) item.status = 'out';
+  else if (item.targetCount != null && item.currentCount < item.targetCount) item.status = 'low';
+  else item.status = 'ok';
+}
+
+function adjustPercent(id, delta){
+  const item = items.find(i => i.id === id);
+  if (!item || !item.trackPercent || item.currentCount !== 1) return;
+  const current = item.lastUnitPercent != null ? item.lastUnitPercent : 100;
+  const next = current + delta;
+  if (next <= 0){
+    // Last unit used up: drop the count and reset percent for the next bottle/tube.
+    item.currentCount = 0;
+    item.lastUnitPercent = 100;
+  } else {
+    item.lastUnitPercent = Math.min(100, next);
+  }
+  recomputeStatus(item);
+  saveItems();
+  renderPantry();
+  renderRestockEstimate();
 }
 
 function resolveUnitFromInputs(selectId, customInputId){
@@ -416,7 +483,13 @@ function saveItem(){
   const targetRaw = qs('item-target').value;
   const currentCount = currentRaw === '' ? null : Math.max(0, parseInt(currentRaw, 10));
   const targetCount = targetRaw === '' ? null : Math.max(0, parseInt(targetRaw, 10));
-  const item = { id: uid(), name, typeId, unit, minPrice, minUnits, currentCount, targetCount, status: 'ok' };
+  const trackPercent = qs('item-track-percent').checked;
+  const targetPercentRaw = qs('item-target-percent').value;
+  const targetPercent = targetPercentRaw === '' ? null : Math.min(100, Math.max(0, parseInt(targetPercentRaw, 10)));
+  const item = {
+    id: uid(), name, typeId, unit, minPrice, minUnits, currentCount, targetCount, status: 'ok',
+    trackPercent, targetPercent, lastUnitPercent: 100
+  };
   recomputeStatus(item);
   items.push(item);
   saveItems();
@@ -425,9 +498,12 @@ function saveItem(){
   qs('item-min-units').value = '';
   qs('item-current').value = '';
   qs('item-target').value = '';
+  qs('item-target-percent').value = '';
   qs('item-unit').value = 'piece';
   qs('item-unit-custom').style.display = 'none';
   qs('item-unit-custom').value = '';
+  qs('item-track-percent').checked = false;
+  qs('item-target-percent-wrap').style.display = 'none';
   renderPantry();
   renderRestockEstimate();
 }
@@ -479,6 +555,9 @@ function editItem(id){
   qs('edit-item-min-units').value = (item.minUnits != null && item.minUnits !== 1) ? item.minUnits : '';
   qs('edit-item-current').value = item.currentCount != null ? item.currentCount : '';
   qs('edit-item-target').value = item.targetCount != null ? item.targetCount : '';
+  qs('edit-item-track-percent').checked = !!item.trackPercent;
+  qs('edit-item-target-percent').value = item.targetPercent != null ? item.targetPercent : '';
+  qs('edit-item-target-percent-wrap').style.display = item.trackPercent ? 'block' : 'none';
   qs('item-modal-overlay').classList.remove('hidden');
 }
 function closeItemModal(){ qs('item-modal-overlay').classList.add('hidden'); }
@@ -498,6 +577,10 @@ function updateItem(){
   const targetRaw = qs('edit-item-target').value;
   item.currentCount = currentRaw === '' ? null : Math.max(0, parseInt(currentRaw, 10));
   item.targetCount = targetRaw === '' ? null : Math.max(0, parseInt(targetRaw, 10));
+  item.trackPercent = qs('edit-item-track-percent').checked;
+  const targetPercentRaw = qs('edit-item-target-percent').value;
+  item.targetPercent = targetPercentRaw === '' ? null : Math.min(100, Math.max(0, parseInt(targetPercentRaw, 10)));
+  if (item.lastUnitPercent == null) item.lastUnitPercent = 100;
   recomputeStatus(item);
   saveItems();
   closeItemModal();
@@ -523,10 +606,59 @@ function deleteItemInline(id){
   renderRestockEstimate();
 }
 
+/* ─── TYPE FILTER (checklist before search) ─── */
+function initTypeFilters(){
+  selectedTypeFilters = new Set(types.map(t => t.id));
+  selectedTypeFilters.add('none');
+}
+
+function toggleTypeFilterPanel(){
+  toggleCollapsible('type-filter-panel', 'type-filter-chevron');
+  if (!qs('type-filter-panel').classList.contains('hidden')) renderTypeFilterCheckboxes();
+}
+
+function renderTypeFilterCheckboxes(){
+  const wrap = qs('type-filter-checkboxes');
+  if (!selectedTypeFilters) initTypeFilters();
+  const hasOrphans = items.some(i => !i.typeId || !types.find(t => t.id === i.typeId));
+  let html = types.map(t => `
+    <label class="type-filter-row">
+      <input type="checkbox" ${selectedTypeFilters.has(t.id) ? 'checked' : ''} onchange="toggleTypeFilter('${t.id}')" />
+      <span class="group-dot" style="background:${t.color};"></span> ${esc(t.name)}
+    </label>
+  `).join('');
+  if (hasOrphans){
+    html += `<label class="type-filter-row">
+      <input type="checkbox" ${selectedTypeFilters.has('none') ? 'checked' : ''} onchange="toggleTypeFilter('none')" />
+      <span class="group-dot" style="background:var(--text-dim);"></span> Other
+    </label>`;
+  }
+  wrap.innerHTML = html || '<p class="empty-msg">No types yet.</p>';
+}
+
+function toggleTypeFilter(key){
+  if (selectedTypeFilters.has(key)) selectedTypeFilters.delete(key);
+  else selectedTypeFilters.add(key);
+  renderPantry();
+}
+
+function setAllTypeFilters(select){
+  selectedTypeFilters = new Set();
+  if (select){
+    types.forEach(t => selectedTypeFilters.add(t.id));
+    selectedTypeFilters.add('none');
+  }
+  renderTypeFilterCheckboxes();
+  renderPantry();
+}
+
 function renderPantry(){
+  if (!selectedTypeFilters) initTypeFilters();
   const search = qs('pantry-search').value.trim().toLowerCase();
   const filtered = items.filter(i => {
     if (pantryFilter !== 'all' && i.status !== pantryFilter) return false;
+    const typeKey = (i.typeId && types.find(t => t.id === i.typeId)) ? i.typeId : 'none';
+    if (!selectedTypeFilters.has(typeKey)) return false;
     if (search && !i.name.toLowerCase().includes(search)) return false;
     return true;
   });
@@ -543,19 +675,53 @@ function renderPantry(){
     if (!groups[key]) groups[key] = [];
     groups[key].push(i);
   });
+
+  const total = filtered.length;
+  const limit = pantryExpanded ? total : 10;
+  let shown = 0;
   let html = '';
+
   types.forEach(t => {
-    if (!groups[t.id]) return;
-    html += renderGroupHtml(t.name, t.color, groups[t.id]);
+    if (shown >= limit || !groups[t.id]) return;
+    const remaining = limit - shown;
+    const slice = groups[t.id].slice(0, remaining);
+    html += renderGroupHtml(t.name, t.color, slice, groups[t.id].length);
+    shown += slice.length;
   });
-  if (groups['none']) html += renderGroupHtml('Other', null, groups['none']);
+  if (shown < limit && groups['none']){
+    const remaining = limit - shown;
+    const slice = groups['none'].slice(0, remaining);
+    if (slice.length > 0){
+      html += renderGroupHtml('Other', null, slice, groups['none'].length);
+      shown += slice.length;
+    }
+  }
+
+  if (total > 10){
+    html += pantryExpanded
+      ? `<button class="btn-secondary btn-full" onclick="collapsePantryList()">Show Less</button>`
+      : `<button class="btn-add-card-item" onclick="expandPantryList()">View All ${total} Supplies</button>`;
+  }
+
   wrap.innerHTML = html;
 }
 
-function renderGroupHtml(name, color, groupItems){
+function expandPantryList(){
+  pantryExpanded = true;
+  localStorage.setItem(LS_KEYS.pantryExpanded, '1');
+  renderPantry();
+}
+function collapsePantryList(){
+  pantryExpanded = false;
+  localStorage.setItem(LS_KEYS.pantryExpanded, '0');
+  renderPantry();
+}
+
+function renderGroupHtml(name, color, groupItems, trueCount){
   const dotStyle = color ? `background:${color};` : 'background:var(--text-dim);';
+  const count = trueCount != null ? trueCount : groupItems.length;
   let html = `<div class="pantry-group">
-    <div class="group-header"><span class="group-dot" style="${dotStyle}"></span><span class="group-name">${esc(name)}</span><span class="group-count">(${groupItems.length})</span></div>`;
+    <div class="group-header"><span class="group-dot" style="${dotStyle}"></span><span class="group-name">${esc(name)}</span><span class="group-count">(${count})</span></div>`;
   groupItems.forEach(i => html += renderItemCardHtml(i, color));
   html += `</div>`;
   return html;
@@ -564,18 +730,46 @@ function renderGroupHtml(name, color, groupItems){
 function renderItemCardHtml(item, typeColor){
   const statusLabelMap = { ok:'In Stock', low:'Needs Refill', out:'Out of Stock' };
   const unitLabel = esc(item.unit || 'piece');
-  const countHtml = (item.currentCount != null)
-    ? `<span class="pantry-count"><strong>${item.currentCount}</strong>${item.targetCount != null ? ' / ' + item.targetCount : ''} ${unitLabel}</span>`
-    : '';
+  const isPercent = !!item.trackPercent;
+
+  let countHtml = '';
+  if (isPercent && item.currentCount != null){
+    if (item.currentCount >= 2){
+      countHtml = `<span class="pantry-count"><strong>${item.currentCount}</strong> ${unitLabel} in stock</span>`;
+    } else if (item.currentCount === 1){
+      const pct = item.lastUnitPercent != null ? item.lastUnitPercent : 100;
+      const target = item.targetPercent != null ? item.targetPercent : 20;
+      const barClass = pct < target ? 'low' : '';
+      countHtml = `<div style="width:100%;"><span class="pantry-count">Last one: <strong>${pct}%</strong> left${item.targetPercent != null ? ' · refill under ' + target + '%' : ''}</span>
+        <div class="pct-bar-wrap"><div class="pct-bar ${barClass}" style="width:${pct}%;"></div></div></div>`;
+    } else {
+      countHtml = `<span class="pantry-count">None left</span>`;
+    }
+  } else if (item.currentCount != null){
+    countHtml = `<span class="pantry-count"><strong>${item.currentCount}</strong>${item.targetCount != null ? ' / ' + item.targetCount : ''} ${unitLabel}</span>`;
+  }
+
   const priceHtml = (item.minPrice != null)
     ? (item.minUnits && item.minUnits > 1
         ? `<span class="pantry-count">₱${formatMoney(item.minPrice)} per ${item.minUnits} ${unitLabel}</span>`
         : `<span class="pantry-count">₱${formatMoney(item.minPrice)} / ${unitLabel}</span>`)
     : '';
-  const trackedActions = (item.currentCount != null)
-    ? `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">− Used</button>
-       <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`
-    : '';
+
+  let trackedActions = '';
+  if (item.currentCount != null){
+    if (isPercent && item.currentCount === 1){
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -10)">− 10%</button>
+         <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -25)">− 25%</button>
+         <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -100)">Empty</button>
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+    } else if (isPercent && item.currentCount === 0){
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+    } else {
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">− Used</button>
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+    }
+  }
+
   return `
     <div class="pantry-item status-${item.status}" style="--tag-color:${typeColor || 'var(--border)'}">
       <div class="pantry-item-top">
@@ -1139,7 +1333,7 @@ function closeTutorial(){ qs('tutorial-overlay').classList.add('hidden'); }
 function goToTutStep(i){ tutStep = i; updateTutorialUI(); }
 function tutNav(dir){
   const next = tutStep + dir;
-  if (next < 0 || next > 1) return;
+  if (next < 0 || next > 2) return;
   tutStep = next;
   updateTutorialUI();
 }
@@ -1148,7 +1342,7 @@ function updateTutorialUI(){
   document.querySelectorAll('.tut-dot').forEach((el, i) => el.classList.toggle('active', i === tutStep));
   qs('tut-prev').style.visibility = tutStep === 0 ? 'hidden' : 'visible';
   const nextBtn = qs('tut-next');
-  if (tutStep === 1){
+  if (tutStep === 2){
     nextBtn.textContent = 'Done';
     nextBtn.onclick = closeTutorial;
   } else {

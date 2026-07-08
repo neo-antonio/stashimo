@@ -83,29 +83,18 @@
             <label for="item-target">Target Count <span style="text-transform:none;font-style:italic;">(optional)</span></label>
             <input type="number" id="item-target" placeholder="e.g. 5" min="0" />
           </div>
+          <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+            <input type="checkbox" id="item-track-percent" onchange="onTrackPercentChange('item-track-percent','item-target-percent-wrap')" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
+            <label for="item-track-percent" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">Measure percent of last stock</label>
+          </div>
+          <div class="field full" id="item-target-percent-wrap" style="display:none;">
+            <label for="item-target-percent">Target % of Last Unit Before Refill</label>
+            <input type="number" id="item-target-percent" placeholder="e.g. 20" min="0" max="100" />
+          </div>
         </div>
-        <p class="card-desc" style="padding:0 0 12px; margin-top:-10px;">If this item can only be bought in bulk (e.g. ₱300 for a pack of 6), enter the pack price and quantity. Leave Min Units blank for a plain per-unit price.</p>
         <div style="display:flex; gap:8px;">
           <button id="save-item-btn" onclick="saveItem()" style="flex:1;">Save Item</button>
           <button class="btn-secondary" onclick="openTypeModal()" style="flex-shrink:0;">+ Type</button>
-        </div>
-      </section>
-
-      <section class="card" id="pantry-list-section">
-        <div class="section-header-row">
-          <h2>Supplies</h2>
-          <div class="header-row-actions">
-            <input type="text" id="pantry-search" placeholder="Search..." oninput="renderPantry()" />
-          </div>
-        </div>
-        <div class="filter-pills" id="pantry-filter-pills">
-          <button class="filter-pill active" data-filter="all" onclick="setPantryFilter('all', this)">All</button>
-          <button class="filter-pill" data-filter="ok" onclick="setPantryFilter('ok', this)">In Stock</button>
-          <button class="filter-pill" data-filter="low" onclick="setPantryFilter('low', this)">Needs Refill</button>
-          <button class="filter-pill" data-filter="out" onclick="setPantryFilter('out', this)">Out of Stock</button>
-        </div>
-        <div id="pantry-list">
-          <p class="empty-msg">No items yet. Add your first item above!</p>
         </div>
       </section>
 
@@ -127,7 +116,32 @@
             <span class="grocery-stat-label">Max Stock (Targets)</span>
           </div>
         </div>
-        <p class="card-desc" style="padding-top:10px; margin-top:0;">Min assumes at least 1 unit of every item that needs restocking. Max stock uses each item's target count (falls back to 1 unit if no target is set).</p>
+      </section>
+
+      <section class="card" id="pantry-list-section">
+        <div class="section-header-row">
+          <h2>Supplies</h2>
+          <div class="header-row-actions">
+            <button class="btn-type-filter" onclick="toggleTypeFilterPanel()">Types <span class="collapse-chevron" id="type-filter-chevron">▾</span></button>
+            <input type="text" id="pantry-search" placeholder="Search..." oninput="renderPantry()" />
+          </div>
+        </div>
+        <div class="type-filter-panel collapsible-body hidden" id="type-filter-panel">
+          <div id="type-filter-checkboxes"></div>
+          <div class="type-filter-actions">
+            <button class="btn-secondary btn-sm" onclick="setAllTypeFilters(true)">Select All</button>
+            <button class="btn-secondary btn-sm" onclick="setAllTypeFilters(false)">Clear All</button>
+          </div>
+        </div>
+        <div class="filter-pills" id="pantry-filter-pills">
+          <button class="filter-pill active" data-filter="all" onclick="setPantryFilter('all', this)">All</button>
+          <button class="filter-pill" data-filter="ok" onclick="setPantryFilter('ok', this)">In Stock</button>
+          <button class="filter-pill" data-filter="low" onclick="setPantryFilter('low', this)">Needs Refill</button>
+          <button class="filter-pill" data-filter="out" onclick="setPantryFilter('out', this)">Out of Stock</button>
+        </div>
+        <div id="pantry-list">
+          <p class="empty-msg">No items yet. Add your first item above!</p>
+        </div>
       </section>
     </div>
 
@@ -187,23 +201,25 @@
       </section>
 
       <section class="card">
-        <details class="dropdown-card">
-          <summary>Reuse a Past Meal</summary>
-          <div class="dropdown-body">
-            <input type="text" id="past-meal-search" placeholder="Search past meals..." oninput="renderPastMealsDropdown()" />
-            <div id="past-meals-list"></div>
-          </div>
-        </details>
+        <div class="collapsible-header" onclick="toggleCollapsible('past-meals-body','past-meals-chevron')">
+          <h2>Reuse a Past Meal</h2>
+          <span class="collapse-chevron" id="past-meals-chevron">▾</span>
+        </div>
+        <div class="collapsible-body hidden" id="past-meals-body">
+          <input type="text" id="past-meal-search" placeholder="Search past meals..." oninput="renderPastMealsDropdown()" />
+          <div id="past-meals-list"></div>
+        </div>
       </section>
 
       <section class="card">
-        <details class="dropdown-card">
-          <summary>All Ingredients</summary>
-          <div class="dropdown-body">
-            <input type="text" id="ingredient-library-search" placeholder="Search ingredients..." oninput="renderIngredientLibraryDropdown()" />
-            <div id="ingredient-library-list"></div>
-          </div>
-        </details>
+        <div class="collapsible-header" onclick="toggleCollapsible('ingredient-library-body','ingredient-library-chevron')">
+          <h2>All Ingredients</h2>
+          <span class="collapse-chevron" id="ingredient-library-chevron">▾</span>
+        </div>
+        <div class="collapsible-body hidden" id="ingredient-library-body">
+          <input type="text" id="ingredient-library-search" placeholder="Search ingredients..." oninput="renderIngredientLibraryDropdown()" />
+          <div id="ingredient-library-list"></div>
+        </div>
       </section>
     </div>
 
@@ -249,6 +265,14 @@
         <div class="field"><label>Min Units</label><input type="number" id="edit-item-min-units" min="1" step="1" /></div>
         <div class="field"><label>Current Count</label><input type="number" id="edit-item-current" min="0" /></div>
         <div class="field"><label>Target Count</label><input type="number" id="edit-item-target" min="0" /></div>
+        <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" id="edit-item-track-percent" onchange="onTrackPercentChange('edit-item-track-percent','edit-item-target-percent-wrap')" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
+          <label for="edit-item-track-percent" style="font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">Measure percent of last stock</label>
+        </div>
+        <div class="field full" id="edit-item-target-percent-wrap" style="display:none;">
+          <label>Target % of Last Unit Before Refill</label>
+          <input type="number" id="edit-item-target-percent" min="0" max="100" />
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-delete" style="flex:0.6;" onclick="deleteItem()">Delete</button>
@@ -387,17 +411,23 @@
       <div class="tutorial-steps">
         <div class="tutorial-step active" id="tut-step-0">
           <h3>Supplies Tracker</h3>
-          <p>Add food and supplies, group them by a custom-colored type, and track a unit + price per unit. Mark items as used, out of stock, or needs refilling with an optional target count.</p>
+          <p>Add food and supplies, group them by a custom-colored type, and track a unit and price. Mark items as used, out of stock, or needs refilling with an optional target count.</p>
         </div>
         <div class="tutorial-step" id="tut-step-1">
+          <h3>Bulk Pricing & Restock Cost</h3>
+          <p>If an item can only be bought in bulk (e.g. ₱300 for a pack of 6), set Min Price and Min Units to that pack price and quantity. The Restock Cost Estimate then rounds up to full packs, since you can't buy a single unit on its own.</p>
+          <p style="margin-top:10px;">For things like shampoo or lotion, check "Measure percent of last stock" to track fullness of just the last bottle. It stays at 100% while 2 or more are in stock, and you can set a target percent for when it should flag as needing refill.</p>
+        </div>
+        <div class="tutorial-step" id="tut-step-2">
           <h3>Meal Planner</h3>
           <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal shows whether its ingredients are complete, partial, or missing.</p>
-          <p style="margin-top:10px;">Meals belong to one week only. Pick which day they're for. Reuse a past meal or grab a saved ingredient anytime from the dropdowns below the Grocery List. Check off items as you shop.</p>
+          <p style="margin-top:10px;">Meals belong to one week only. Reuse a past meal or grab a saved ingredient anytime from the dropdowns below the Grocery List. Check off items as you shop.</p>
         </div>
       </div>
       <div class="tutorial-dots">
         <span class="tut-dot active" onclick="goToTutStep(0)"></span>
         <span class="tut-dot" onclick="goToTutStep(1)"></span>
+        <span class="tut-dot" onclick="goToTutStep(2)"></span>
       </div>
       <div class="tutorial-actions">
         <button class="btn-secondary" id="tut-prev" onclick="tutNav(-1)" style="visibility:hidden;">Back</button>
@@ -424,7 +454,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.4</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.5</p>
   </footer>
 
 </body>

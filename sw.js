@@ -1,6 +1,6 @@
 // Stashimo Service Worker
 // Bump CACHE_VERSION on every deploy to GitHub Pages so users pick up new files.
-const CACHE_VERSION = 'stashimo-v0.4';
+const CACHE_VERSION = 'stashimo-v0.5.0';
 const CACHE_NAME = CACHE_VERSION;
 
 const PRECACHE_URLS = [
@@ -36,37 +36,26 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first for navigation/HTML so updates on GitHub Pages show up quickly,
-// cache-first for everything else (css/js/images) with a background refresh.
+// Network-first for EVERYTHING (HTML, JS, CSS, manifest). This guarantees the
+// HTML, script, and stylesheet always land together as a matched set whenever
+// the device is online, avoiding stale-file mismatches (e.g. new HTML paired
+// with an old cached script expecting different form fields). Cache is only
+// used as an offline fallback.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
   const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
 
-  if (isHTML) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const fetchPromise = fetch(req).then((res) => {
+    fetch(req)
+      .then((res) => {
         if (res && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
         }
         return res;
-      }).catch(() => cached);
-      return cached || fetchPromise;
-    })
+      })
+      .catch(() => caches.match(req).then((cached) => cached || (isHTML ? caches.match('./index.html') : undefined)))
   );
 });
