@@ -1,6 +1,6 @@
 // Stashimo Service Worker
 // Bump CACHE_VERSION on every deploy to GitHub Pages so users pick up new files.
-const CACHE_VERSION = 'stashimo-v0.5.0';
+const CACHE_VERSION = 'stashimo-v1.0.0';
 const CACHE_NAME = CACHE_VERSION;
 
 const PRECACHE_URLS = [
