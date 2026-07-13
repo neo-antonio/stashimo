@@ -28,14 +28,115 @@
     </div>
     <div class="header-right">
       <nav>
+        <button class="nav-tab" onclick="showPage('habits', this)">Habits</button>
         <button class="nav-tab active" onclick="showPage('pantry', this)">Supplies</button>
         <button class="nav-tab" onclick="showPage('planner', this)">Meal Planner</button>
+        <button class="nav-tab" onclick="showPage('distributor', this)">Distributor</button>
       </nav>
       <button class="btn-header-settings" onclick="openSettings()">Settings</button>
     </div>
   </header>
 
   <main>
+
+    <!-- ══════════ HABITS PAGE ══════════ -->
+    <div class="page" id="page-habits">
+
+      <section class="card">
+        <div class="week-nav">
+          <button onclick="changeHabitDay(-1)">‹</button>
+          <div class="week-nav-label" id="habit-date-label" onclick="openHabitCalendar()">
+            <div class="week-range" id="habit-date-text">Loading...</div>
+            <div class="week-sub" id="habit-date-sub">Tap to pick a date</div>
+          </div>
+          <button onclick="changeHabitDay(1)">›</button>
+        </div>
+        <div class="week-actions">
+          <button class="btn-edit-goal" onclick="openHabitCalendar()">Pick Date</button>
+          <button class="btn-edit-goal" onclick="goToHabitToday()">Go to Today</button>
+        </div>
+      </section>
+
+      <section class="card" id="add-habit-section">
+        <h2>Add Habit</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="habit-name">Habit Name</label>
+            <input type="text" id="habit-name" placeholder="e.g. Water the plants" />
+          </div>
+          <div class="field">
+            <label for="habit-category">Category <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="text" id="habit-category" placeholder="e.g. Chores" />
+          </div>
+          <div class="field">
+            <label for="habit-start-date">Start Date</label>
+            <input type="date" id="habit-start-date" />
+          </div>
+          <div class="field full">
+            <label for="habit-description">Description <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <textarea id="habit-description" placeholder="Any extra detail..." rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label for="habit-repeat-type">Repeats</label>
+            <select id="habit-repeat-type" onchange="onHabitRepeatTypeChange()">
+              <option value="once">Once</option>
+              <option value="daily">Every X Days</option>
+              <option value="weekly">Every X Weeks</option>
+              <option value="monthly">Every X Months</option>
+              <option value="yearly">Every X Years</option>
+            </select>
+          </div>
+          <div class="field" id="habit-interval-wrap" style="display:none;">
+            <label for="habit-interval">Every</label>
+            <input type="number" id="habit-interval" min="1" step="1" value="1" />
+          </div>
+          <div class="field full" id="habit-weekly-days-wrap" style="display:none;">
+            <label>On These Days</label>
+            <div class="weekday-picker" id="habit-weekly-days"></div>
+          </div>
+          <div class="field" id="habit-monthly-day-wrap" style="display:none;">
+            <label for="habit-monthly-day">Day of Month</label>
+            <input type="number" id="habit-monthly-day" min="1" max="31" placeholder="e.g. 15" />
+          </div>
+          <div class="field full" id="habit-end-wrap" style="display:none;">
+            <label for="habit-end-type">Ends</label>
+            <select id="habit-end-type" onchange="onHabitEndTypeChange()">
+              <option value="never">Never</option>
+              <option value="after">After a Number of Times</option>
+              <option value="on">On a Specific Date</option>
+            </select>
+          </div>
+          <div class="field" id="habit-end-count-wrap" style="display:none;">
+            <label for="habit-end-count">Occurrences</label>
+            <input type="number" id="habit-end-count" min="1" step="1" placeholder="e.g. 10" />
+          </div>
+          <div class="field" id="habit-end-date-wrap" style="display:none;">
+            <label for="habit-end-date">End Date</label>
+            <input type="date" id="habit-end-date" />
+          </div>
+        </div>
+        <input type="hidden" id="editing-habit-id" />
+        <div style="display:flex; gap:8px;">
+          <button id="save-habit-btn" onclick="saveHabit()" style="flex:1;">Save Habit</button>
+          <button class="btn-delete" id="habit-delete-btn" style="display:none; flex-shrink:0;" onclick="deleteHabitFromForm()">Delete</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 id="habit-checklist-title">Habits</h2>
+        <div id="habit-checklist"></div>
+      </section>
+
+      <section class="card collapsible-card">
+        <div class="collapsible-header" onclick="toggleCollapsible('all-habits-body','all-habits-chevron')">
+          <h2>All Habits</h2>
+          <span class="collapse-chevron" id="all-habits-chevron">▾</span>
+        </div>
+        <div class="collapsible-body hidden" id="all-habits-body">
+          <div id="all-habits-list"></div>
+        </div>
+      </section>
+    </div>
 
     <!-- ══════════ SUPPLIES PAGE ══════════ -->
     <div class="page active" id="page-pantry">
@@ -150,16 +251,16 @@
 
       <section class="card">
         <div class="week-nav">
-          <button class="week-nav-arrow" onclick="changeWeek(-1)">‹</button>
+          <button onclick="changeWeek(-1)">‹</button>
           <div class="week-nav-label" id="week-nav-label" onclick="openCalendar()">
             <div class="week-range" id="week-range-text">Loading...</div>
             <div class="week-sub" id="week-sub-text">Tap to pick a week</div>
           </div>
-          <button class="week-nav-arrow" onclick="changeWeek(1)">›</button>
+          <button onclick="changeWeek(1)">›</button>
         </div>
         <div class="week-actions">
-          <button class="btn-secondary" onclick="openCalendar()">Pick Week</button>
-          <button class="btn-secondary" onclick="goToThisWeek()">This Week</button>
+          <button class="btn-edit-goal" onclick="openCalendar()">Pick Week</button>
+          <button class="btn-edit-goal" onclick="goToThisWeek()">This Week</button>
         </div>
       </section>
 
@@ -200,7 +301,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card collapsible-card" id="card-past-meals">
         <div class="collapsible-header" onclick="toggleCollapsible('past-meals-body','past-meals-chevron')">
           <h2>Reuse a Past Meal</h2>
           <span class="collapse-chevron" id="past-meals-chevron">▾</span>
@@ -211,7 +312,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card collapsible-card" id="card-ingredient-library">
         <div class="collapsible-header" onclick="toggleCollapsible('ingredient-library-body','ingredient-library-chevron')">
           <h2>All Ingredients</h2>
           <span class="collapse-chevron" id="ingredient-library-chevron">▾</span>
@@ -223,10 +324,97 @@
       </section>
     </div>
 
+    <!-- ══════════ DISTRIBUTOR PAGE ══════════ -->
+    <div class="page" id="page-distributor">
+
+      <section class="card">
+        <h2>Overview</h2>
+        <div class="grocery-summary cols-2">
+          <div class="grocery-stat">
+            <span class="grocery-stat-val" id="dist-money-left">₱0</span>
+            <span class="grocery-stat-label">Money Left</span>
+          </div>
+          <div class="grocery-stat">
+            <span class="grocery-stat-val" id="dist-next-salary">-</span>
+            <span class="grocery-stat-label">Next Salary</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="add-income-section">
+        <h2>Add Income</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="income-name">Name</label>
+            <input type="text" id="income-name" placeholder="e.g. Salary" />
+          </div>
+          <div class="field">
+            <label for="income-date">Expected Date</label>
+            <input type="date" id="income-date" />
+          </div>
+          <div class="field">
+            <label for="income-amount">Amount (₱)</label>
+            <input type="number" id="income-amount" placeholder="e.g. 25000" min="0" step="0.01" />
+          </div>
+        </div>
+        <input type="hidden" id="editing-income-id" />
+        <div style="display:flex; gap:8px;">
+          <button id="save-income-btn" onclick="saveIncome()" style="flex:1;">Save Income</button>
+          <button class="btn-delete" id="income-delete-btn" style="display:none; flex-shrink:0;" onclick="deleteIncomeFromForm()">Delete</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Income</h2>
+        <div id="income-list"></div>
+      </section>
+
+      <section class="card" id="add-budget-item-section">
+        <h2>Add Item</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="budget-item-name">Name</label>
+            <input type="text" id="budget-item-name" placeholder="e.g. Rent, New Phone" />
+          </div>
+          <div class="field">
+            <label for="budget-item-date">Date <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <input type="date" id="budget-item-date" />
+          </div>
+          <div class="field">
+            <label for="budget-item-amount">Amount (₱)</label>
+            <input type="number" id="budget-item-amount" placeholder="e.g. 1500" min="0" step="0.01" />
+          </div>
+          <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+            <input type="checkbox" id="budget-item-is-debt" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
+            <label for="budget-item-is-debt" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">This is a debt or credit card purchase</label>
+          </div>
+        </div>
+        <input type="hidden" id="editing-budget-item-id" />
+        <div style="display:flex; gap:8px;">
+          <button id="save-budget-item-btn" onclick="saveBudgetItem()" style="flex:1;">Save Item</button>
+          <button class="btn-delete" id="budget-item-delete-btn" style="display:none; flex-shrink:0;" onclick="deleteBudgetItemFromForm()">Delete</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Planned Items</h2>
+        <div id="budget-items-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Debts &amp; Credit Card Purchases</h2>
+        <div id="debt-items-list"></div>
+      </section>
+    </div>
+
   </main>
 
   <!-- BOTTOM NAV (mobile) -->
   <nav class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="showPage('habits', this, true)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/></svg>
+      Habits
+    </button>
     <button class="bottom-nav-btn active" onclick="showPage('pantry', this, true)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M9 12h6"/></svg>
       Supplies
@@ -234,6 +422,10 @@
     <button class="bottom-nav-btn" onclick="showPage('planner', this, true)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       Planner
+    </button>
+    <button class="bottom-nav-btn" onclick="showPage('distributor', this, true)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 5v14"/><path d="M9 5c4 0 6 1.8 6 4s-2 4-6 4"/><path d="M5 8.5h8"/><path d="M5 11h8"/></svg>
+      Distributor
     </button>
   </nav>
 
@@ -286,16 +478,12 @@
   <div id="type-modal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeTypeModal()">
     <div class="modal">
       <h2>Manage Types</h2>
-      <p class="modal-sub">Create color types to group your supplies (e.g. Food, Bathroom, Cleaning).</p>
+      <p class="modal-sub">Create types to group your supplies (e.g. Food, Bathroom, Cleaning).</p>
 
       <div class="form-grid" style="grid-template-columns:1fr;">
         <div class="field full">
           <label>Type Name</label>
           <input type="text" id="new-type-name" placeholder="e.g. Bathroom" />
-        </div>
-        <div class="field full">
-          <label>Color</label>
-          <div class="color-swatch-grid" id="new-type-color-grid"></div>
         </div>
       </div>
       <input type="hidden" id="editing-type-id" />
@@ -332,6 +520,10 @@
             <option value="6">Sunday</option>
           </select>
         </div>
+        <div class="field full">
+          <label>Note <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+          <textarea id="meal-note" placeholder="e.g. Use the slow cooker, double the recipe..." rows="2"></textarea>
+        </div>
       </div>
 
       <div class="section-divider">Ingredients</div>
@@ -361,6 +553,24 @@
       <div class="cal-grid" id="cal-grid"></div>
       <div style="text-align:center;margin-top:14px;">
         <button class="btn-secondary" onclick="closeCalendar()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HABIT DATE PICKER MODAL -->
+  <div id="habit-cal-overlay" class="modal-overlay-base hidden" onclick="if(event.target===this)closeHabitCalendar()">
+    <div class="cal-modal">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="habitCalPrevMonth()">‹</button>
+        <span id="habit-cal-month-label"></span>
+        <button class="cal-nav" onclick="habitCalNextMonth()">›</button>
+      </div>
+      <div class="cal-weekdays">
+        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+      </div>
+      <div class="cal-grid" id="habit-cal-grid"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn-secondary" onclick="closeHabitCalendar()">Close</button>
       </div>
     </div>
   </div>
@@ -454,7 +664,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v1.0</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.2</p>
   </footer>
 
 </body>

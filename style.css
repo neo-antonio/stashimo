@@ -64,7 +64,7 @@ header { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(
 .tagline a { color: rgba(255,255,255,0.8); font-weight: 500; text-decoration: none; }
 .tagline a:hover { color: #ffffff; }
 
-.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .btn-header-settings {
   background: transparent; color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.22);
   border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: 'Ubuntu', sans-serif;
@@ -73,10 +73,10 @@ header { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(
 .btn-header-settings:hover { background: rgba(255,255,255,0.12); color: #fff; opacity: 1; box-shadow: none; border-color: rgba(255,255,255,0.35); }
 
 /* ─── NAV ─── */
-nav { display: flex; gap: 10px; flex-shrink: 0; }
+nav { display: flex; gap: 8px; flex-shrink: 0; }
 .nav-tab {
   background: transparent; color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+  border-radius: 8px; padding: 8px 13px; font-size: 12.5px; font-weight: 500; cursor: pointer;
   box-shadow: none; font-family: 'Ubuntu', sans-serif; transition: background 0.2s, color 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
@@ -106,13 +106,14 @@ main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16
 .field.full { grid-column: 1 / -1; }
 label { font-size: 11px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; }
 
-input[type="text"], input[type="number"], input[type="date"] {
+input[type="text"], input[type="number"], input[type="date"], textarea {
   background: var(--surface); border: 1px solid var(--input-border); border-radius: 8px;
   padding: 10px 12px; color: var(--text); font-size: 14px; font-family: 'Ubuntu', sans-serif;
   outline: none; transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
 }
-input:focus { border-color: var(--border); box-shadow: 0 0 0 3px var(--accent2-dim); }
-input::placeholder { color: var(--text-dim); }
+textarea { resize: vertical; min-height: 44px; }
+input:focus, textarea:focus { border-color: var(--border); box-shadow: 0 0 0 3px var(--accent2-dim); }
+input::placeholder, textarea::placeholder { color: var(--text-dim); }
 
 select {
   background: var(--surface); border: 1px solid var(--input-border); border-radius: 8px;
@@ -186,7 +187,7 @@ button:active { transform: scale(0.97); }
 .pantry-group:last-child { margin-bottom: 0; }
 
 .pantry-item {
-  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--tag-color, var(--border));
+  background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; transition: border-color 0.15s;
 }
 .pantry-item:last-child { margin-bottom: 0; }
@@ -277,18 +278,18 @@ button:active { transform: scale(0.97); }
 .cal-day.selected-anchor { background: var(--border) !important; color: #ffffff !important; font-weight: 700; border-radius: 7px !important; }
 .cal-day.has-data::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--accent2); }
 
-/* ─── WEEK NAV ─── */
-.week-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.week-nav-arrow {
-  background: var(--surface); color: var(--text-mid); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 16px; font-size: 18px; font-weight: 600; box-shadow: none; line-height: 1;
-}
-.week-nav-arrow:hover { background: var(--border); color: #fff; box-shadow: none; opacity: 1; }
+/* ─── WEEK NAV (matches Eatshimo's date-nav / btn-edit-goal exactly) ─── */
+.week-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.week-nav > button { background: var(--surface); color: var(--text-mid); border: 1px solid var(--border); padding: 8px 14px; font-size: 20px; border-radius: 8px; box-shadow: none; line-height: 1; -webkit-tap-highlight-color: transparent; }
+.week-nav > button:hover { background: var(--border); color: #ffffff; box-shadow: none; opacity: 1; }
+.week-nav > button:active { background: var(--border); color: #ffffff; transform: scale(0.97); }
 .week-nav-label { text-align: center; flex: 1; cursor: pointer; }
 .week-nav-label .week-range { font-size: 15px; font-weight: 700; color: var(--text); }
 .week-nav-label .week-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-.week-actions { display: flex; gap: 8px; margin-top: 12px; }
-.week-actions button { flex: 1; }
+.week-actions { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.btn-edit-goal { background: var(--accent-dim); color: var(--text); border: 1px solid var(--border); padding: 6px 14px; font-size: 12px; font-weight: 500; border-radius: 7px; box-shadow: none; font-family: 'Ubuntu', sans-serif; }
+.btn-edit-goal:hover { background: rgba(51,56,64,0.10); box-shadow: none; opacity: 1; }
+.week-actions .btn-edit-goal { padding: 8px 18px; font-size: 13px; flex: 1; }
 
 /* ─── DAY GROUP (MEAL PLANNER) ─── */
 .day-group { margin-bottom: 18px; }
@@ -303,6 +304,7 @@ button:active { transform: scale(0.97); }
 .meal-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .meal-name { font-size: 14px; font-weight: 700; color: var(--text); }
 .meal-ingredient-count { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.meal-note { font-size: 12px; color: var(--text-mid); background: var(--accent-dim); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; white-space: pre-wrap; }
 .meal-card-actions { display: flex; gap: 6px; margin-top: 10px; }
 .meal-ingredient-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .ing-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; color: var(--text-mid); background: var(--bg); border: 1px solid var(--input-border); border-radius: 999px; padding: 3px 9px; }
@@ -328,6 +330,44 @@ button:active { transform: scale(0.97); }
 .grocery-item-meal { font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
 .grocery-item-cost { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
 .grocery-item.bought .grocery-item-cost { color: var(--text-dim); }
+
+/* ─── WEEKDAY PICKER (Habits) ─── */
+.weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.weekday-pill {
+  background: var(--surface); color: var(--text-mid); border: 1px solid var(--input-border); border-radius: 8px;
+  padding: 8px 0; font-size: 12px; font-weight: 600; box-shadow: none; width: 40px; text-align: center;
+}
+.weekday-pill.selected { background: var(--border); color: #fff; border-color: var(--border); }
+.weekday-pill:hover:not(.selected) { background: var(--accent-dim); opacity: 1; box-shadow: none; }
+
+/* ─── HABIT CHECKLIST ─── */
+.habit-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--input-border); }
+.habit-item:last-child { border-bottom: none; }
+.habit-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; margin-top: 1px; }
+.habit-item-info { flex: 1; min-width: 0; }
+.habit-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.habit-item.done .habit-item-name { text-decoration: line-through; color: var(--text-dim); }
+.habit-item-meta { display: flex; gap: 6px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+.habit-item-category { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-mid); background: var(--accent-dim); border-radius: 6px; padding: 2px 8px; }
+.habit-item-desc { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.habit-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.all-habit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
+.all-habit-row:last-child { border-bottom: none; }
+.all-habit-row-info { min-width: 0; flex: 1; }
+.all-habit-row-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.all-habit-row-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* ─── DISTRIBUTOR LIST ITEMS ─── */
+.dist-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
+.dist-item:last-child { border-bottom: none; }
+.dist-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+.dist-item-info { flex: 1; min-width: 0; }
+.dist-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.dist-item.paid .dist-item-name { text-decoration: line-through; color: var(--text-dim); }
+.dist-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.dist-item-amount { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
+.dist-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .grocery-item .icon-btn { flex-shrink: 0; }
 
 .grocery-add-row { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -363,11 +403,12 @@ button:active { transform: scale(0.97); }
 /* ─── TYPE FILTER (checklist) ─── */
 .btn-type-filter { background: var(--accent-dim); color: var(--text-mid); border: 1px solid var(--input-border); box-shadow: none; font-size: 13px; font-weight: 500; padding: 10px 14px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 .btn-type-filter:hover { background: var(--border); color: #fff; opacity: 1; box-shadow: none; }
-.type-filter-panel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 12px; background: var(--bg); border: 1px solid var(--input-border); border-radius: 10px; }
-#type-filter-checkboxes { display: flex; flex-direction: column; gap: 10px; }
-.type-filter-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
-.type-filter-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--border); cursor: pointer; flex-shrink: 0; }
-.type-filter-actions { display: flex; gap: 8px; margin-top: 2px; }
+.type-filter-panel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 4px 12px; background: var(--bg); border: 1px solid var(--input-border); border-radius: 10px; }
+#type-filter-checkboxes { display: flex; flex-direction: column; }
+.type-filter-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
+.type-filter-row:last-child { border-bottom: none; }
+.type-filter-row input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--border); cursor: pointer; flex-shrink: 0; }
+.type-filter-actions { display: flex; gap: 8px; margin: 4px 0 8px; }
 .type-filter-actions button { font-size: 11px; padding: 4px 10px; }
 
 

@@ -9,11 +9,6 @@ const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>';
 
 /* ─── CONSTANTS ─── */
-// Distinct hues only, no near-duplicate purples/greens/blues, ordered as a clean spectrum.
-const COLOR_PALETTE = [
-  '#23272f', '#ffffff', '#e0726f', '#e0a458', '#d9c25c',
-  '#7fb08f', '#4fa8a6', '#6f9bd6', '#8b7fd6', '#c77bc9'
-];
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const UNIT_PRESETS = ['piece','pack','bottle','box','can','kg','g','liter','ml'];
 
@@ -27,6 +22,10 @@ const LS_KEYS = {
   theme: 'stashimo_theme',
   tut: 'stashimo_tutorial_seen',
   pantryExpanded: 'stashimo_pantry_expanded',
+  habits: 'stashimo_habits',
+  habitDate: 'stashimo_habit_date',
+  income: 'stashimo_income',
+  budgetItems: 'stashimo_budget_items',
   // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
   legacyPrice: 'stashimo_price_memory',
@@ -89,6 +88,11 @@ let currentWeekStart = localStorage.getItem(LS_KEYS.week) || toISODate(getMonday
 let currentTheme = localStorage.getItem(LS_KEYS.theme) || 'slate';
 let pantryFilter = 'all';
 let pantryExpanded = localStorage.getItem(LS_KEYS.pantryExpanded) === '1';
+let habits = loadJSON(LS_KEYS.habits, []);
+let currentHabitDate = localStorage.getItem(LS_KEYS.habitDate) || toISODate(new Date());
+let habitCalViewDate = fromISODate(currentHabitDate);
+let incomeEntries = loadJSON(LS_KEYS.income, []);
+let budgetItems = loadJSON(LS_KEYS.budgetItems, []);
 let selectedTypeFilters = null; // Set of type ids (+ 'none' for orphans) currently shown; null = not yet initialized
 let calViewDate = fromISODate(currentWeekStart);
 let tutStep = 0;
@@ -100,7 +104,7 @@ let tutStep = 0;
   if (legacyTagsRaw && types.length === 0){
     try {
       const legacyTags = JSON.parse(legacyTagsRaw);
-      types = legacyTags.map(t => ({ id: t.id, name: t.name, color: t.color }));
+      types = legacyTags.map(t => ({ id: t.id, name: t.name }));
       items.forEach(i => {
         if (i.tagId !== undefined){ i.typeId = i.tagId; delete i.tagId; }
         if (i.type !== undefined){ delete i.type; }
@@ -175,7 +179,7 @@ let tutStep = 0;
 })();
 
 if (types.length === 0){
-  types.push({ id: uid(), name: 'Food', color: COLOR_PALETTE[0] });
+  types.push({ id: uid(), name: 'Food' });
   saveTypes();
 }
 
@@ -184,15 +188,21 @@ function saveTypes(){ localStorage.setItem(LS_KEYS.types, JSON.stringify(types))
 function saveMeals(){ localStorage.setItem(LS_KEYS.meals, JSON.stringify(meals)); }
 function saveIngredientLibrary(){ localStorage.setItem(LS_KEYS.ingLib, JSON.stringify(ingredientLibrary)); }
 function saveExtraGroceryItems(){ localStorage.setItem(LS_KEYS.extraGrocery, JSON.stringify(extraGroceryItems)); }
+function saveHabits(){ localStorage.setItem(LS_KEYS.habits, JSON.stringify(habits)); }
+function persistHabitDate(){ localStorage.setItem(LS_KEYS.habitDate, currentHabitDate); }
+function saveIncomeEntries(){ localStorage.setItem(LS_KEYS.income, JSON.stringify(incomeEntries)); }
+function saveBudgetItems(){ localStorage.setItem(LS_KEYS.budgetItems, JSON.stringify(budgetItems)); }
 function persistCurrentWeek(){ localStorage.setItem(LS_KEYS.week, currentWeekStart); }
 
 /* ─── PAGE NAV ─── */
+const PAGE_ORDER = ['habits', 'pantry', 'planner', 'distributor'];
+
 function showPage(name, btnEl, fromBottom){
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   qs('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
-  const idx = name === 'pantry' ? 0 : 1;
+  const idx = PAGE_ORDER.indexOf(name);
   const navTabs = document.querySelectorAll('.nav-tab');
   const bottomBtns = document.querySelectorAll('.bottom-nav-btn');
   if (navTabs[idx]) navTabs[idx].classList.add('active');
@@ -300,25 +310,8 @@ function renderThemeSwatches(){
   grid.innerHTML = Object.keys(THEMES).map(key => {
     const t = THEMES[key];
     const selected = currentTheme === key;
-    return `<button type="button" class="theme-pill${selected ? ' selected' : ''}" style="background:${t.headerBg};" onclick="selectTheme('${key}')">${selected ? '<span class="theme-check">✓</span> ' : ''}${t.label}</button>`;
+    return `<button type="button" class="theme-pill${selected ? ' selected' : ''}" style="background:${t.headerBg};" onclick="selectTheme('${key}')">${t.label}</button>`;
   }).join('');
-}
-
-/* ═══════════════════ COLOR SWATCH PICKER (shared) ═══════════════════ */
-function renderColorGrid(containerId, selected){
-  const grid = qs(containerId);
-  const sel = selected || COLOR_PALETTE[0];
-  grid.dataset.selected = sel;
-  grid.innerHTML = COLOR_PALETTE.map(c =>
-    `<button type="button" class="color-swatch${c === sel ? ' selected' : ''}" style="background:${c}" data-color="${c}" onclick="selectColorSwatch('${containerId}','${c}')"></button>`
-  ).join('');
-}
-function selectColorSwatch(containerId, color){
-  const grid = qs(containerId);
-  grid.dataset.selected = color;
-  grid.querySelectorAll('.color-swatch').forEach(sw => {
-    sw.classList.toggle('selected', sw.dataset.color === color);
-  });
 }
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
@@ -339,7 +332,6 @@ function openTypeModal(){
   qs('new-type-name').value = '';
   qs('editing-type-id').value = '';
   qs('type-save-btn').textContent = 'Add Type';
-  renderColorGrid('new-type-color-grid', COLOR_PALETTE[2]);
   renderTypeList();
   qs('type-modal-overlay').classList.remove('hidden');
 }
@@ -358,10 +350,7 @@ function renderTypeList(){
   }
   wrap.innerHTML = types.map(t => `
     <div class="settings-row">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span class="group-dot" style="background:${t.color};"></span>
-        <span class="settings-row-label">${esc(t.name)}</span>
-      </div>
+      <span class="settings-row-label">${esc(t.name)}</span>
       <div style="display:flex;gap:6px;">
         <button class="btn-sm btn-edit" onclick="editTypeInline('${t.id}')">Edit</button>
         <button class="btn-sm btn-delete" onclick="deleteTypeConfirm('${t.id}')">Delete</button>
@@ -376,19 +365,17 @@ function editTypeInline(id){
   qs('new-type-name').value = t.name;
   qs('editing-type-id').value = t.id;
   qs('type-save-btn').textContent = 'Update Type';
-  renderColorGrid('new-type-color-grid', t.color);
 }
 
 function saveType(){
   const name = qs('new-type-name').value.trim();
   if (!name){ alert('Please enter a type name.'); return; }
-  const color = qs('new-type-color-grid').dataset.selected || COLOR_PALETTE[0];
   const editingId = qs('editing-type-id').value;
   if (editingId){
     const t = types.find(x => x.id === editingId);
-    if (t){ t.name = name; t.color = color; }
+    if (t){ t.name = name; }
   } else {
-    const newType = { id: uid(), name, color };
+    const newType = { id: uid(), name };
     types.push(newType);
     if (selectedTypeFilters) selectedTypeFilters.add(newType.id);
   }
@@ -396,7 +383,6 @@ function saveType(){
   qs('new-type-name').value = '';
   qs('editing-type-id').value = '';
   qs('type-save-btn').textContent = 'Add Type';
-  renderColorGrid('new-type-color-grid', COLOR_PALETTE[2]);
   renderTypeList();
   refreshTypeSelects();
   renderTypeFilterCheckboxes();
@@ -454,6 +440,27 @@ function adjustPercent(id, delta){
     item.lastUnitPercent = 100;
   } else {
     item.lastUnitPercent = Math.min(100, next);
+  }
+  recomputeStatus(item);
+  saveItems();
+  renderPantry();
+  renderRestockEstimate();
+}
+
+function setPercentDirectly(id){
+  const item = items.find(i => i.id === id);
+  if (!item || !item.trackPercent || item.currentCount !== 1) return;
+  const current = item.lastUnitPercent != null ? item.lastUnitPercent : 100;
+  const raw = prompt('Percent remaining in the last one (0-100):', current);
+  if (raw === null) return;
+  let pct = parseInt(raw, 10);
+  if (isNaN(pct)) return;
+  pct = Math.min(100, Math.max(0, pct));
+  if (pct <= 0){
+    item.currentCount = 0;
+    item.lastUnitPercent = 100;
+  } else {
+    item.lastUnitPercent = pct;
   }
   recomputeStatus(item);
   saveItems();
@@ -624,13 +631,13 @@ function renderTypeFilterCheckboxes(){
   let html = types.map(t => `
     <label class="type-filter-row">
       <input type="checkbox" ${selectedTypeFilters.has(t.id) ? 'checked' : ''} onchange="toggleTypeFilter('${t.id}')" />
-      <span class="group-dot" style="background:${t.color};"></span> ${esc(t.name)}
+      ${esc(t.name)}
     </label>
   `).join('');
   if (hasOrphans){
     html += `<label class="type-filter-row">
       <input type="checkbox" ${selectedTypeFilters.has('none') ? 'checked' : ''} onchange="toggleTypeFilter('none')" />
-      <span class="group-dot" style="background:var(--text-dim);"></span> Other
+      Other
     </label>`;
   }
   wrap.innerHTML = html || '<p class="empty-msg">No types yet.</p>';
@@ -685,14 +692,14 @@ function renderPantry(){
     if (shown >= limit || !groups[t.id]) return;
     const remaining = limit - shown;
     const slice = groups[t.id].slice(0, remaining);
-    html += renderGroupHtml(t.name, t.color, slice, groups[t.id].length);
+    html += renderGroupHtml(t.name, slice, groups[t.id].length);
     shown += slice.length;
   });
   if (shown < limit && groups['none']){
     const remaining = limit - shown;
     const slice = groups['none'].slice(0, remaining);
     if (slice.length > 0){
-      html += renderGroupHtml('Other', null, slice, groups['none'].length);
+      html += renderGroupHtml('Other', slice, groups['none'].length);
       shown += slice.length;
     }
   }
@@ -717,17 +724,16 @@ function collapsePantryList(){
   renderPantry();
 }
 
-function renderGroupHtml(name, color, groupItems, trueCount){
-  const dotStyle = color ? `background:${color};` : 'background:var(--text-dim);';
+function renderGroupHtml(name, groupItems, trueCount){
   const count = trueCount != null ? trueCount : groupItems.length;
   let html = `<div class="pantry-group">
-    <div class="group-header"><span class="group-dot" style="${dotStyle}"></span><span class="group-name">${esc(name)}</span><span class="group-count">(${count})</span></div>`;
-  groupItems.forEach(i => html += renderItemCardHtml(i, color));
+    <div class="group-header"><span class="group-name">${esc(name)}</span><span class="group-count">(${count})</span></div>`;
+  groupItems.forEach(i => html += renderItemCardHtml(i));
   html += `</div>`;
   return html;
 }
 
-function renderItemCardHtml(item, typeColor){
+function renderItemCardHtml(item){
   const statusLabelMap = { ok:'In Stock', low:'Needs Refill', out:'Out of Stock' };
   const unitLabel = esc(item.unit || 'piece');
   const isPercent = !!item.trackPercent;
@@ -760,6 +766,7 @@ function renderItemCardHtml(item, typeColor){
     if (isPercent && item.currentCount === 1){
       trackedActions = `<button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -10)">− 10%</button>
          <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -25)">− 25%</button>
+         <button class="btn-pantry-action" onclick="setPercentDirectly('${item.id}')">Edit %</button>
          <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -100)">Empty</button>
          <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
     } else if (isPercent && item.currentCount === 0){
@@ -771,7 +778,7 @@ function renderItemCardHtml(item, typeColor){
   }
 
   return `
-    <div class="pantry-item status-${item.status}" style="--tag-color:${typeColor || 'var(--border)'}">
+    <div class="pantry-item status-${item.status}">
       <div class="pantry-item-top">
         <div>
           <div class="pantry-item-name">${esc(item.name)}</div>
@@ -901,6 +908,7 @@ function renderMealCardHtml(meal){
       ${esc(ing.name)}${ing.cost != null ? ` <span class="ing-cost">₱${formatMoney(ing.cost)}</span>` : ''}
     </label>`;
   }).join('');
+  const noteHtml = meal.note ? `<p class="meal-note">${esc(meal.note)}</p>` : '';
   return `
     <div class="meal-card">
       <div class="meal-card-top">
@@ -910,6 +918,7 @@ function renderMealCardHtml(meal){
         </div>
         <span class="meal-status ${stats.status}">${stats.label}</span>
       </div>
+      ${noteHtml}
       ${chips ? `<div class="meal-ingredient-chips">${chips}</div>` : ''}
       <div class="meal-card-actions">
         <button class="btn-sm btn-edit" onclick="editMeal('${meal.id}')">Edit</button>
@@ -1015,6 +1024,7 @@ function openMealModal(){
   qs('editing-meal-id').value = '';
   qs('meal-name').value = '';
   qs('meal-day').value = '0';
+  qs('meal-note').value = '';
   qs('meal-ingredient-list').innerHTML = '';
   refreshIngredientSuggestions();
   addIngredientRow();
@@ -1053,6 +1063,7 @@ function editMeal(id){
   qs('editing-meal-id').value = meal.id;
   qs('meal-name').value = meal.name;
   qs('meal-day').value = String(meal.day);
+  qs('meal-note').value = meal.note || '';
   qs('meal-ingredient-list').innerHTML = '';
   refreshIngredientSuggestions();
   if (meal.ingredients.length === 0) addIngredientRow();
@@ -1076,6 +1087,7 @@ function saveMeal(){
   const name = qs('meal-name').value.trim();
   if (!name){ alert('Please enter a meal name.'); return; }
   const day = parseInt(qs('meal-day').value, 10);
+  const note = qs('meal-note').value.trim();
   const collected = collectIngredientsFromModal();
 
   collected.forEach(ing => {
@@ -1092,6 +1104,7 @@ function saveMeal(){
       const oldIngredients = meal.ingredients;
       meal.name = name;
       meal.day = day;
+      meal.note = note;
       meal.ingredients = collected.map(ni => {
         const old = oldIngredients.find(oi => oi.id === ni.id);
         return { id: ni.id, name: ni.name, cost: ni.cost, bought: old ? !!old.bought : false };
@@ -1099,7 +1112,7 @@ function saveMeal(){
     }
   } else {
     const ingredients = collected.map(ing => Object.assign({ bought: false }, ing));
-    meals.push({ id: uid(), weekStart: currentWeekStart, day, name, ingredients });
+    meals.push({ id: uid(), weekStart: currentWeekStart, day, name, note, ingredients });
   }
   saveMeals();
   closeMealModal();
@@ -1268,7 +1281,10 @@ function openSettings(){ renderThemeSwatches(); qs('settings-overlay').classList
 function closeSettings(){ qs('settings-overlay').classList.add('hidden'); }
 
 function exportData(){
-  const payload = { items, types, meals, ingredientLibrary, extraGroceryItems, exportedAt: new Date().toISOString(), version: 'stashimo-v0.3' };
+  const payload = {
+    items, types, meals, ingredientLibrary, extraGroceryItems, habits, incomeEntries, budgetItems,
+    exportedAt: new Date().toISOString(), version: 'stashimo-v0.6'
+  };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1297,11 +1313,18 @@ function importData(event){
       meals = data.meals;
       ingredientLibrary = data.ingredientLibrary || {};
       extraGroceryItems = data.extraGroceryItems || {};
+      habits = data.habits || [];
+      incomeEntries = data.incomeEntries || [];
+      budgetItems = data.budgetItems || [];
       saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
+      saveHabits(); saveIncomeEntries(); saveBudgetItems();
       refreshTypeSelects();
       renderPantry();
       renderRestockEstimate();
       renderPlanner();
+      resetHabitForm();
+      renderHabitsPage();
+      renderDistributor();
       closeSettings();
       alert('Import complete!');
     } catch(e){
@@ -1313,17 +1336,24 @@ function importData(event){
 }
 
 function resetAllData(){
-  if (!confirm('This will permanently erase all supplies, types, and meal plans. Continue?')) return;
+  if (!confirm('This will permanently erase all supplies, types, meal plans, habits, and distributor data. Continue?')) return;
   items = [];
   meals = [];
   ingredientLibrary = {};
   extraGroceryItems = {};
-  types = [{ id: uid(), name: 'Food', color: COLOR_PALETTE[0] }];
+  types = [{ id: uid(), name: 'Food' }];
+  habits = [];
+  incomeEntries = [];
+  budgetItems = [];
   saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
+  saveHabits(); saveIncomeEntries(); saveBudgetItems();
   refreshTypeSelects();
   renderPantry();
   renderRestockEstimate();
   renderPlanner();
+  resetHabitForm();
+  renderHabitsPage();
+  renderDistributor();
   closeSettings();
 }
 
@@ -1351,12 +1381,559 @@ function updateTutorialUI(){
   }
 }
 
+/* ═══════════════════════════ HABITS ═══════════════════════════ */
+function daysBetweenISO(aISO, bISO){
+  return Math.round((fromISODate(bISO) - fromISODate(aISO)) / 86400000);
+}
+
+/* Returns the 1-based occurrence number if `dateISO` is a scheduled
+   occurrence of `habit` (ignoring the "ends after N" cap), or null if it
+   is not a scheduled date at all (wrong day, before start, past an end date). */
+function habitOccurrenceIndex(habit, dateISO){
+  if (dateISO < habit.startDate) return null;
+  if (habit.endType === 'on' && habit.endDate && dateISO > habit.endDate) return null;
+
+  const interval = Math.max(1, habit.interval || 1);
+
+  if (habit.repeatType === 'once'){
+    return dateISO === habit.startDate ? 1 : null;
+  }
+
+  if (habit.repeatType === 'daily'){
+    const diff = daysBetweenISO(habit.startDate, dateISO);
+    if (diff % interval !== 0) return null;
+    return Math.floor(diff / interval) + 1;
+  }
+
+  if (habit.repeatType === 'weekly'){
+    const days = (habit.weeklyDays && habit.weeklyDays.length) ? habit.weeklyDays : [(fromISODate(habit.startDate).getDay() + 6) % 7];
+    const dow = (fromISODate(dateISO).getDay() + 6) % 7; // Monday = 0
+    if (!days.includes(dow)) return null;
+    const startMonday = toISODate(getMonday(fromISODate(habit.startDate)));
+    const targetMonday = toISODate(getMonday(fromISODate(dateISO)));
+    const weekDiff = Math.round((fromISODate(targetMonday) - fromISODate(startMonday)) / (7 * 86400000));
+    if (weekDiff < 0 || weekDiff % interval !== 0) return null;
+    // Count matching occurrences from the start up through this date to get the index.
+    let count = 0;
+    for (let w = 0; w <= weekDiff; w += interval){
+      const weekMonday = addDays(fromISODate(startMonday), w * 7);
+      const sortedDays = days.slice().sort((a, b) => a - b);
+      for (const d of sortedDays){
+        const occISO = toISODate(addDays(weekMonday, d));
+        if (occISO < habit.startDate) continue;
+        if (habit.endType === 'on' && habit.endDate && occISO > habit.endDate) continue;
+        if (occISO <= dateISO) count++;
+      }
+    }
+    return count > 0 ? count : null;
+  }
+
+  if (habit.repeatType === 'monthly'){
+    const d = fromISODate(dateISO);
+    const targetDay = habit.monthlyDay || fromISODate(habit.startDate).getDate();
+    if (d.getDate() !== targetDay) return null;
+    const s = fromISODate(habit.startDate);
+    const monthDiff = (d.getFullYear() - s.getFullYear()) * 12 + (d.getMonth() - s.getMonth());
+    if (monthDiff < 0 || monthDiff % interval !== 0) return null;
+    return Math.floor(monthDiff / interval) + 1;
+  }
+
+  if (habit.repeatType === 'yearly'){
+    const d = fromISODate(dateISO);
+    const s = fromISODate(habit.startDate);
+    if (d.getMonth() !== s.getMonth() || d.getDate() !== s.getDate()) return null;
+    const yearDiff = d.getFullYear() - s.getFullYear();
+    if (yearDiff < 0 || yearDiff % interval !== 0) return null;
+    return Math.floor(yearDiff / interval) + 1;
+  }
+
+  return null;
+}
+
+function habitOccursOnDate(habit, dateISO){
+  const idx = habitOccurrenceIndex(habit, dateISO);
+  if (idx === null) return false;
+  if (habit.endType === 'after' && habit.endCount != null && idx > habit.endCount) return false;
+  return true;
+}
+
+function formatHabitSchedule(habit){
+  const startLabel = fromISODate(habit.startDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  let base;
+  if (habit.repeatType === 'once'){
+    base = 'Once on ' + startLabel;
+  } else if (habit.repeatType === 'daily'){
+    base = habit.interval === 1 ? 'Every day' : 'Every ' + habit.interval + ' days';
+  } else if (habit.repeatType === 'weekly'){
+    const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const days = (habit.weeklyDays || []).slice().sort((a,b)=>a-b).map(d => names[d]).join(', ');
+    base = (habit.interval === 1 ? 'Every week' : 'Every ' + habit.interval + ' weeks') + (days ? ' on ' + days : '');
+  } else if (habit.repeatType === 'monthly'){
+    base = (habit.interval === 1 ? 'Every month' : 'Every ' + habit.interval + ' months') + ' on day ' + habit.monthlyDay;
+  } else if (habit.repeatType === 'yearly'){
+    base = habit.interval === 1 ? 'Every year' : 'Every ' + habit.interval + ' years';
+  } else {
+    base = '';
+  }
+  if (habit.repeatType !== 'once'){
+    if (habit.endType === 'after') base += ', ends after ' + habit.endCount + ' times';
+    else if (habit.endType === 'on') base += ', ends ' + fromISODate(habit.endDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+  return base;
+}
+
+function changeHabitDay(delta){
+  currentHabitDate = toISODate(addDays(fromISODate(currentHabitDate), delta));
+  persistHabitDate();
+  renderHabitsPage();
+}
+function goToHabitToday(){
+  currentHabitDate = toISODate(new Date());
+  persistHabitDate();
+  renderHabitsPage();
+}
+
+function openHabitCalendar(){
+  habitCalViewDate = fromISODate(currentHabitDate);
+  renderHabitCalendar();
+  qs('habit-cal-overlay').classList.remove('hidden');
+}
+function closeHabitCalendar(){ qs('habit-cal-overlay').classList.add('hidden'); }
+function habitCalPrevMonth(){ habitCalViewDate = new Date(habitCalViewDate.getFullYear(), habitCalViewDate.getMonth()-1, 1); renderHabitCalendar(); }
+function habitCalNextMonth(){ habitCalViewDate = new Date(habitCalViewDate.getFullYear(), habitCalViewDate.getMonth()+1, 1); renderHabitCalendar(); }
+
+function renderHabitCalendar(){
+  const year = habitCalViewDate.getFullYear();
+  const month = habitCalViewDate.getMonth();
+  qs('habit-cal-month-label').textContent = new Date(year, month, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const todayISO = toISODate(new Date());
+
+  let html = '';
+  for (let i = 0; i < firstWeekday; i++) html += '<span class="cal-empty"></span>';
+  for (let d = 1; d <= daysInMonth; d++){
+    const dateObj = new Date(year, month, d);
+    const iso = toISODate(dateObj);
+    const classes = ['cal-day'];
+    if (iso === todayISO) classes.push('today');
+    if (iso === currentHabitDate) classes.push('selected-anchor');
+    const hasHabit = habits.some(h => habitOccursOnDate(h, iso));
+    if (hasHabit) classes.push('has-data');
+    html += `<span class="${classes.join(' ')}" onclick="selectHabitDate('${iso}')">${d}</span>`;
+  }
+  qs('habit-cal-grid').innerHTML = html;
+}
+
+function selectHabitDate(iso){
+  currentHabitDate = iso;
+  persistHabitDate();
+  renderHabitsPage();
+  closeHabitCalendar();
+}
+
+function renderHabitDateNav(){
+  const d = fromISODate(currentHabitDate);
+  qs('habit-date-text').textContent = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  const todayISO = toISODate(new Date());
+  qs('habit-date-sub').textContent = (currentHabitDate === todayISO) ? 'Today' : 'Tap to pick a date';
+  qs('habit-checklist-title').textContent = (currentHabitDate === todayISO) ? "Today's Habits" : 'Habits for This Day';
+}
+
+function onHabitRepeatTypeChange(){
+  const type = qs('habit-repeat-type').value;
+  qs('habit-interval-wrap').style.display = (type === 'once') ? 'none' : 'block';
+  qs('habit-weekly-days-wrap').style.display = (type === 'weekly') ? 'block' : 'none';
+  qs('habit-monthly-day-wrap').style.display = (type === 'monthly') ? 'block' : 'none';
+  qs('habit-end-wrap').style.display = (type === 'once') ? 'none' : 'block';
+  if (type === 'once'){
+    qs('habit-end-count-wrap').style.display = 'none';
+    qs('habit-end-date-wrap').style.display = 'none';
+  }
+}
+
+function onHabitEndTypeChange(){
+  const type = qs('habit-end-type').value;
+  qs('habit-end-count-wrap').style.display = (type === 'after') ? 'block' : 'none';
+  qs('habit-end-date-wrap').style.display = (type === 'on') ? 'block' : 'none';
+}
+
+function renderWeekdayPicker(selectedDays){
+  const sel = selectedDays || [];
+  const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const wrap = qs('habit-weekly-days');
+  wrap.dataset.selected = JSON.stringify(sel);
+  wrap.innerHTML = names.map((n, i) =>
+    `<button type="button" class="weekday-pill${sel.includes(i) ? ' selected' : ''}" data-day="${i}" onclick="toggleHabitWeekday(${i})">${n}</button>`
+  ).join('');
+}
+
+function toggleHabitWeekday(day){
+  const wrap = qs('habit-weekly-days');
+  let sel = JSON.parse(wrap.dataset.selected || '[]');
+  if (sel.includes(day)) sel = sel.filter(d => d !== day);
+  else sel.push(day);
+  renderWeekdayPicker(sel);
+}
+
+function resetHabitForm(){
+  qs('editing-habit-id').value = '';
+  qs('habit-name').value = '';
+  qs('habit-category').value = '';
+  qs('habit-description').value = '';
+  qs('habit-start-date').value = currentHabitDate;
+  qs('habit-repeat-type').value = 'once';
+  qs('habit-interval').value = '1';
+  qs('habit-monthly-day').value = '';
+  qs('habit-end-type').value = 'never';
+  qs('habit-end-count').value = '';
+  qs('habit-end-date').value = '';
+  renderWeekdayPicker([]);
+  onHabitRepeatTypeChange();
+  onHabitEndTypeChange();
+  qs('save-habit-btn').textContent = 'Save Habit';
+  qs('habit-delete-btn').style.display = 'none';
+}
+
+function saveHabit(){
+  const name = qs('habit-name').value.trim();
+  if (!name){ alert('Please enter a habit name.'); return; }
+  const category = qs('habit-category').value.trim();
+  const description = qs('habit-description').value.trim();
+  const startDate = qs('habit-start-date').value || currentHabitDate;
+  const repeatType = qs('habit-repeat-type').value;
+  const interval = Math.max(1, parseInt(qs('habit-interval').value, 10) || 1);
+  const weeklyDays = JSON.parse(qs('habit-weekly-days').dataset.selected || '[]');
+  const monthlyDay = qs('habit-monthly-day').value ? Math.min(31, Math.max(1, parseInt(qs('habit-monthly-day').value, 10))) : fromISODate(startDate).getDate();
+  const endType = repeatType === 'once' ? 'never' : qs('habit-end-type').value;
+  const endCount = qs('habit-end-count').value ? Math.max(1, parseInt(qs('habit-end-count').value, 10)) : null;
+  const endDate = qs('habit-end-date').value || null;
+
+  const editingId = qs('editing-habit-id').value;
+  if (editingId){
+    const h = habits.find(x => x.id === editingId);
+    if (h){
+      Object.assign(h, { name, category, description, startDate, repeatType, interval, weeklyDays, monthlyDay, endType, endCount, endDate });
+    }
+  } else {
+    habits.push({
+      id: uid(), name, category, description, startDate, repeatType, interval,
+      weeklyDays, monthlyDay, endType, endCount, endDate, completedDates: []
+    });
+  }
+  saveHabits();
+  resetHabitForm();
+  renderHabitsPage();
+}
+
+function editHabitInline(id){
+  const h = habits.find(x => x.id === id);
+  if (!h) return;
+  qs('editing-habit-id').value = h.id;
+  qs('habit-name').value = h.name;
+  qs('habit-category').value = h.category || '';
+  qs('habit-description').value = h.description || '';
+  qs('habit-start-date').value = h.startDate;
+  qs('habit-repeat-type').value = h.repeatType;
+  qs('habit-interval').value = h.interval || 1;
+  qs('habit-monthly-day').value = h.monthlyDay || '';
+  qs('habit-end-type').value = h.endType || 'never';
+  qs('habit-end-count').value = h.endCount != null ? h.endCount : '';
+  qs('habit-end-date').value = h.endDate || '';
+  renderWeekdayPicker(h.weeklyDays || []);
+  onHabitRepeatTypeChange();
+  onHabitEndTypeChange();
+  qs('save-habit-btn').textContent = 'Update Habit';
+  qs('habit-delete-btn').style.display = 'block';
+  qs('add-habit-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteHabitFromForm(){
+  const id = qs('editing-habit-id').value;
+  if (!id) return;
+  deleteHabitInline(id);
+}
+
+function deleteHabitInline(id){
+  if (!confirm('Delete this habit?')) return;
+  habits = habits.filter(h => h.id !== id);
+  saveHabits();
+  resetHabitForm();
+  renderHabitsPage();
+}
+
+function toggleHabitDone(id){
+  const h = habits.find(x => x.id === id);
+  if (!h) return;
+  if (!h.completedDates) h.completedDates = [];
+  const idx = h.completedDates.indexOf(currentHabitDate);
+  if (idx >= 0) h.completedDates.splice(idx, 1);
+  else h.completedDates.push(currentHabitDate);
+  saveHabits();
+  renderHabitChecklist();
+}
+
+function renderHabitChecklist(){
+  const wrap = qs('habit-checklist');
+  const todays = habits.filter(h => habitOccursOnDate(h, currentHabitDate));
+  if (todays.length === 0){
+    wrap.innerHTML = '<p class="empty-msg">No habits scheduled for this day.</p>';
+    return;
+  }
+  wrap.innerHTML = todays.map(h => {
+    const done = (h.completedDates || []).includes(currentHabitDate);
+    return `
+    <div class="habit-item ${done ? 'done' : ''}">
+      <input type="checkbox" ${done ? 'checked' : ''} onchange="toggleHabitDone('${h.id}')" />
+      <div class="habit-item-info">
+        <div class="habit-item-name">${esc(h.name)}</div>
+        <div class="habit-item-meta">
+          ${h.category ? `<span class="habit-item-category">${esc(h.category)}</span>` : ''}
+        </div>
+        ${h.description ? `<div class="habit-item-desc">${esc(h.description)}</div>` : ''}
+      </div>
+      <div class="habit-item-actions">
+        <button class="icon-btn" onclick="editHabitInline('${h.id}')" title="Edit">${ICON_EDIT}</button>
+        <button class="icon-btn" onclick="deleteHabitInline('${h.id}')" title="Delete">${ICON_TRASH}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAllHabitsList(){
+  const wrap = qs('all-habits-list');
+  if (habits.length === 0){
+    wrap.innerHTML = '<p class="empty-msg">No habits yet.</p>';
+    return;
+  }
+  wrap.innerHTML = habits.map(h => `
+    <div class="all-habit-row">
+      <div class="all-habit-row-info">
+        <div class="all-habit-row-name">${esc(h.name)}</div>
+        <div class="all-habit-row-meta">${esc(formatHabitSchedule(h))}</div>
+      </div>
+      <div style="display:flex; gap:6px; flex-shrink:0;">
+        <button class="btn-sm btn-edit" onclick="editHabitInline('${h.id}')">Edit</button>
+        <button class="btn-sm btn-delete" onclick="deleteHabitInline('${h.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderHabitsPage(){
+  renderHabitDateNav();
+  renderHabitChecklist();
+  renderAllHabitsList();
+}
+
+/* ═══════════════════════════ DISTRIBUTOR ═══════════════════════════ */
+function resetIncomeForm(){
+  qs('editing-income-id').value = '';
+  qs('income-name').value = '';
+  qs('income-date').value = '';
+  qs('income-amount').value = '';
+  qs('save-income-btn').textContent = 'Save Income';
+  qs('income-delete-btn').style.display = 'none';
+}
+
+function saveIncome(){
+  const name = qs('income-name').value.trim();
+  if (!name){ alert('Please enter a name.'); return; }
+  const date = qs('income-date').value;
+  if (!date){ alert('Please choose an expected date.'); return; }
+  const amountRaw = qs('income-amount').value;
+  const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
+
+  const editingId = qs('editing-income-id').value;
+  if (editingId){
+    const entry = incomeEntries.find(e => e.id === editingId);
+    if (entry) Object.assign(entry, { name, date, amount });
+  } else {
+    incomeEntries.push({ id: uid(), name, date, amount });
+  }
+  saveIncomeEntries();
+  resetIncomeForm();
+  renderDistributor();
+}
+
+function editIncomeInline(id){
+  const entry = incomeEntries.find(e => e.id === id);
+  if (!entry) return;
+  qs('editing-income-id').value = entry.id;
+  qs('income-name').value = entry.name;
+  qs('income-date').value = entry.date;
+  qs('income-amount').value = entry.amount;
+  qs('save-income-btn').textContent = 'Update Income';
+  qs('income-delete-btn').style.display = 'block';
+  qs('add-income-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteIncomeFromForm(){
+  const id = qs('editing-income-id').value;
+  if (!id) return;
+  if (!confirm('Delete this income entry?')) return;
+  incomeEntries = incomeEntries.filter(e => e.id !== id);
+  saveIncomeEntries();
+  resetIncomeForm();
+  renderDistributor();
+}
+
+function deleteIncomeInline(id){
+  if (!confirm('Delete this income entry?')) return;
+  incomeEntries = incomeEntries.filter(e => e.id !== id);
+  saveIncomeEntries();
+  renderDistributor();
+}
+
+function resetBudgetItemForm(){
+  qs('editing-budget-item-id').value = '';
+  qs('budget-item-name').value = '';
+  qs('budget-item-date').value = '';
+  qs('budget-item-amount').value = '';
+  qs('budget-item-is-debt').checked = false;
+  qs('save-budget-item-btn').textContent = 'Save Item';
+  qs('budget-item-delete-btn').style.display = 'none';
+}
+
+function saveBudgetItem(){
+  const name = qs('budget-item-name').value.trim();
+  if (!name){ alert('Please enter a name.'); return; }
+  const date = qs('budget-item-date').value || null;
+  const amountRaw = qs('budget-item-amount').value;
+  const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
+  const isDebt = qs('budget-item-is-debt').checked;
+
+  const editingId = qs('editing-budget-item-id').value;
+  if (editingId){
+    const item = budgetItems.find(i => i.id === editingId);
+    if (item) Object.assign(item, { name, date, amount, isDebt });
+  } else {
+    budgetItems.push({ id: uid(), name, date, amount, isDebt, paid: false });
+  }
+  saveBudgetItems();
+  resetBudgetItemForm();
+  renderDistributor();
+}
+
+function editBudgetItemInline(id){
+  const item = budgetItems.find(i => i.id === id);
+  if (!item) return;
+  qs('editing-budget-item-id').value = item.id;
+  qs('budget-item-name').value = item.name;
+  qs('budget-item-date').value = item.date || '';
+  qs('budget-item-amount').value = item.amount;
+  qs('budget-item-is-debt').checked = !!item.isDebt;
+  qs('save-budget-item-btn').textContent = 'Update Item';
+  qs('budget-item-delete-btn').style.display = 'block';
+  qs('add-budget-item-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteBudgetItemFromForm(){
+  const id = qs('editing-budget-item-id').value;
+  if (!id) return;
+  if (!confirm('Delete this item?')) return;
+  budgetItems = budgetItems.filter(i => i.id !== id);
+  saveBudgetItems();
+  resetBudgetItemForm();
+  renderDistributor();
+}
+
+function deleteBudgetItemInline(id){
+  if (!confirm('Delete this item?')) return;
+  budgetItems = budgetItems.filter(i => i.id !== id);
+  saveBudgetItems();
+  renderDistributor();
+}
+
+function toggleBudgetItemPaid(id){
+  const item = budgetItems.find(i => i.id === id);
+  if (!item) return;
+  item.paid = !item.paid;
+  saveBudgetItems();
+  renderDistributor();
+}
+
+function renderDistIncomeList(){
+  const wrap = qs('income-list');
+  if (incomeEntries.length === 0){
+    wrap.innerHTML = '<p class="empty-msg">No income entries yet.</p>';
+    return;
+  }
+  const sorted = incomeEntries.slice().sort((a, b) => a.date.localeCompare(b.date));
+  wrap.innerHTML = sorted.map(e => `
+    <div class="dist-item">
+      <div class="dist-item-info">
+        <div class="dist-item-name">${esc(e.name)}</div>
+        <div class="dist-item-meta">${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</div>
+      </div>
+      <div class="dist-item-amount">₱${formatMoney(e.amount)}</div>
+      <div class="dist-item-actions">
+        <button class="icon-btn" onclick="editIncomeInline('${e.id}')" title="Edit">${ICON_EDIT}</button>
+        <button class="icon-btn" onclick="deleteIncomeInline('${e.id}')" title="Delete">${ICON_TRASH}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDistBudgetLists(){
+  const regular = budgetItems.filter(i => !i.isDebt);
+  const debts = budgetItems.filter(i => i.isDebt);
+
+  const renderRow = (i) => `
+    <div class="dist-item ${i.paid ? 'paid' : ''}">
+      <input type="checkbox" ${i.paid ? 'checked' : ''} onchange="toggleBudgetItemPaid('${i.id}')" title="Paid" />
+      <div class="dist-item-info">
+        <div class="dist-item-name">${esc(i.name)}</div>
+        <div class="dist-item-meta">${i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set'}</div>
+      </div>
+      <div class="dist-item-amount">₱${formatMoney(i.amount)}</div>
+      <div class="dist-item-actions">
+        <button class="icon-btn" onclick="editBudgetItemInline('${i.id}')" title="Edit">${ICON_EDIT}</button>
+        <button class="icon-btn" onclick="deleteBudgetItemInline('${i.id}')" title="Delete">${ICON_TRASH}</button>
+      </div>
+    </div>`;
+
+  qs('budget-items-list').innerHTML = regular.length
+    ? regular.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).map(renderRow).join('')
+    : '<p class="empty-msg">No planned items yet.</p>';
+
+  qs('debt-items-list').innerHTML = debts.length
+    ? debts.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).map(renderRow).join('')
+    : '<p class="empty-msg">No debts or credit card purchases yet.</p>';
+}
+
+function renderDistributorSummary(){
+  const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
+  const moneyLeft = totalIncome - totalItems;
+  qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
+
+  const todayISO = toISODate(new Date());
+  const upcoming = incomeEntries.filter(e => e.date >= todayISO).sort((a, b) => a.date.localeCompare(b.date));
+  if (upcoming.length > 0){
+    const next = upcoming[0];
+    const label = fromISODate(next.date).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    qs('dist-next-salary').textContent = '₱' + formatMoney(next.amount) + ' on ' + label;
+  } else {
+    qs('dist-next-salary').textContent = 'None planned';
+  }
+}
+
+function renderDistributor(){
+  renderDistributorSummary();
+  renderDistIncomeList();
+  renderDistBudgetLists();
+}
+
 /* ═══════════════════════════ INIT ═══════════════════════════ */
 applyTheme(currentTheme);
 refreshTypeSelects();
 renderPantry();
 renderRestockEstimate();
 renderPlanner();
+resetHabitForm();
+renderHabitsPage();
+renderDistributor();
 
 if (!localStorage.getItem(LS_KEYS.tut)){
   openTutorial();
