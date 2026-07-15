@@ -16,16 +16,16 @@ const LS_KEYS = {
   items: 'stashimo_items',
   types: 'stashimo_types',
   meals: 'stashimo_meals',
+  weekIngredients: 'stashimo_week_ingredients',
   ingLib: 'stashimo_ingredient_library',
   extraGrocery: 'stashimo_extra_grocery',
   week: 'stashimo_current_week',
   theme: 'stashimo_theme',
   tut: 'stashimo_tutorial_seen',
   pantryExpanded: 'stashimo_pantry_expanded',
-  habits: 'stashimo_habits',
-  habitDate: 'stashimo_habit_date',
   income: 'stashimo_income',
   budgetItems: 'stashimo_budget_items',
+  distPlanDate: 'stashimo_dist_plan_date',
   // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
   legacyPrice: 'stashimo_price_memory',
@@ -82,20 +82,20 @@ function loadJSON(key, fallback){
 let items = loadJSON(LS_KEYS.items, []);
 let types = loadJSON(LS_KEYS.types, []);
 let meals = loadJSON(LS_KEYS.meals, []);
+let weekIngredients = loadJSON(LS_KEYS.weekIngredients, {}); // { weekStart: [{id, name, cost, bought, mealIds:[mealId,...]}] }
 let ingredientLibrary = loadJSON(LS_KEYS.ingLib, {}); // { lowercaseName: { name, cost } }
 let extraGroceryItems = loadJSON(LS_KEYS.extraGrocery, {}); // { weekStart: [{id, name, cost, bought}] }
 let currentWeekStart = localStorage.getItem(LS_KEYS.week) || toISODate(getMonday(new Date()));
 let currentTheme = localStorage.getItem(LS_KEYS.theme) || 'slate';
 let pantryFilter = 'all';
 let pantryExpanded = localStorage.getItem(LS_KEYS.pantryExpanded) === '1';
-let habits = loadJSON(LS_KEYS.habits, []);
-let currentHabitDate = localStorage.getItem(LS_KEYS.habitDate) || toISODate(new Date());
-let habitCalViewDate = fromISODate(currentHabitDate);
 let incomeEntries = loadJSON(LS_KEYS.income, []);
 let budgetItems = loadJSON(LS_KEYS.budgetItems, []);
+let distPlanDate = localStorage.getItem(LS_KEYS.distPlanDate) || toISODate(new Date());
 let selectedTypeFilters = null; // Set of type ids (+ 'none' for orphans) currently shown; null = not yet initialized
 let calViewDate = fromISODate(currentWeekStart);
 let tutStep = 0;
+let currentPage = 'pantry';
 
 /* ─── ONE-TIME MIGRATION ─── */
 (function migrateLegacyData(){
@@ -175,6 +175,34 @@ let tutStep = 0;
   });
   if (extrasChanged) saveExtraGroceryItems();
 
+  // v0.6 -> current: ingredients used to be embedded per-meal (own bought flag,
+  // duplicated across meals with the same name). Now they live in a shared
+  // per-week pool (weekIngredients) referenced by mealIds, so the same
+  // ingredient can belong to multiple meals and share one bought/cost state.
+  let weekIngredientsChanged = false;
+  meals.forEach(m => {
+    if (!Array.isArray(m.ingredients)) return;
+    weekIngredientsChanged = true;
+    if (!weekIngredients[m.weekStart]) weekIngredients[m.weekStart] = [];
+    const list = weekIngredients[m.weekStart];
+    m.ingredients.forEach(ing => {
+      const key = (ing.name || '').trim().toLowerCase();
+      let match = list.find(w => w.name.trim().toLowerCase() === key);
+      if (match){
+        if (!match.mealIds.includes(m.id)) match.mealIds.push(m.id);
+        if (match.cost == null && ing.cost != null) match.cost = ing.cost;
+        if (!match.bought && ing.bought) match.bought = true;
+      } else {
+        list.push({
+          id: ing.id || uid(), name: ing.name, cost: ing.cost != null ? ing.cost : null,
+          bought: !!ing.bought, mealIds: [m.id]
+        });
+      }
+    });
+    delete m.ingredients;
+  });
+  if (weekIngredientsChanged){ saveMeals(); saveWeekIngredients(); }
+
   if (legacyBoughtLog) localStorage.removeItem(LS_KEYS.legacyBoughtLog);
 })();
 
@@ -186,18 +214,19 @@ if (types.length === 0){
 function saveItems(){ localStorage.setItem(LS_KEYS.items, JSON.stringify(items)); }
 function saveTypes(){ localStorage.setItem(LS_KEYS.types, JSON.stringify(types)); }
 function saveMeals(){ localStorage.setItem(LS_KEYS.meals, JSON.stringify(meals)); }
+function saveWeekIngredients(){ localStorage.setItem(LS_KEYS.weekIngredients, JSON.stringify(weekIngredients)); }
 function saveIngredientLibrary(){ localStorage.setItem(LS_KEYS.ingLib, JSON.stringify(ingredientLibrary)); }
 function saveExtraGroceryItems(){ localStorage.setItem(LS_KEYS.extraGrocery, JSON.stringify(extraGroceryItems)); }
-function saveHabits(){ localStorage.setItem(LS_KEYS.habits, JSON.stringify(habits)); }
-function persistHabitDate(){ localStorage.setItem(LS_KEYS.habitDate, currentHabitDate); }
 function saveIncomeEntries(){ localStorage.setItem(LS_KEYS.income, JSON.stringify(incomeEntries)); }
 function saveBudgetItems(){ localStorage.setItem(LS_KEYS.budgetItems, JSON.stringify(budgetItems)); }
 function persistCurrentWeek(){ localStorage.setItem(LS_KEYS.week, currentWeekStart); }
+function persistDistPlanDate(){ localStorage.setItem(LS_KEYS.distPlanDate, distPlanDate); }
 
 /* ─── PAGE NAV ─── */
-const PAGE_ORDER = ['habits', 'pantry', 'planner', 'distributor'];
+const PAGE_ORDER = ['pantry', 'planner', 'distributor'];
 
 function showPage(name, btnEl, fromBottom){
+  currentPage = name;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   qs('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
@@ -349,9 +378,9 @@ function renderTypeList(){
     return;
   }
   wrap.innerHTML = types.map(t => `
-    <div class="settings-row">
+    <div class="type-manage-row">
       <span class="settings-row-label">${esc(t.name)}</span>
-      <div style="display:flex;gap:6px;">
+      <div class="type-manage-row-actions">
         <button class="btn-sm btn-edit" onclick="editTypeInline('${t.id}')">Edit</button>
         <button class="btn-sm btn-delete" onclick="deleteTypeConfirm('${t.id}')">Delete</button>
       </div>
@@ -471,7 +500,7 @@ function setPercentDirectly(id){
 function resolveUnitFromInputs(selectId, customInputId){
   const sel = qs(selectId);
   if (sel.value === 'custom'){
-    const custom = qs(customInputId).value.trim();
+    const custom = qs(customInputId).value.trim().toLowerCase();
     return custom || 'unit';
   }
   return sel.value;
@@ -749,7 +778,7 @@ function renderItemCardHtml(item){
       countHtml = `<div style="width:100%;"><span class="pantry-count">Last one: <strong>${pct}%</strong> left${item.targetPercent != null ? ' · refill under ' + target + '%' : ''}</span>
         <div class="pct-bar-wrap"><div class="pct-bar ${barClass}" style="width:${pct}%;"></div></div></div>`;
     } else {
-      countHtml = `<span class="pantry-count">None left</span>`;
+      countHtml = '';
     }
   } else if (item.currentCount != null){
     countHtml = `<span class="pantry-count"><strong>${item.currentCount}</strong>${item.targetCount != null ? ' / ' + item.targetCount : ''} ${unitLabel}</span>`;
@@ -764,36 +793,39 @@ function renderItemCardHtml(item){
   let trackedActions = '';
   if (item.currentCount != null){
     if (isPercent && item.currentCount === 1){
-      trackedActions = `<button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -10)">− 10%</button>
-         <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -25)">− 25%</button>
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -10)">−10%</button>
          <button class="btn-pantry-action" onclick="setPercentDirectly('${item.id}')">Edit %</button>
-         <button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -100)">Empty</button>
-         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
     } else if (isPercent && item.currentCount === 0){
-      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
     } else {
-      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">− Used</button>
-         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+ Restock</button>`;
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">−Used</button>
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
     }
   }
+
+  // Once a status is already applied, its button disappears rather than
+  // offering an "undo" — restocking (or picking the other status) is what
+  // moves it off that status.
+  const needsRefillBtn = item.status === 'low'
+    ? '' : `<button class="btn-pantry-action warn" onclick="toggleStatus('${item.id}','low')">NR</button>`;
+  const oosBtn = item.status === 'out'
+    ? '' : `<button class="btn-pantry-action danger" onclick="toggleStatus('${item.id}','out')">OOS</button>`;
 
   return `
     <div class="pantry-item status-${item.status}">
       <div class="pantry-item-top">
-        <div>
-          <div class="pantry-item-name">${esc(item.name)}</div>
-          <div class="pantry-item-meta">
-            ${countHtml}
-            ${priceHtml}
-          </div>
-        </div>
+        <div class="pantry-item-name">${esc(item.name)}</div>
         <span class="status-badge ${item.status}">${statusLabelMap[item.status]}</span>
+      </div>
+      <div class="pantry-item-meta">
+        ${countHtml}
+        ${priceHtml}
       </div>
       <div class="pantry-actions">
         ${trackedActions}
-        <button class="btn-pantry-action warn" onclick="toggleStatus('${item.id}','low')">${item.status === 'low' ? 'Undo Refill' : 'Needs Refill'}</button>
-        <button class="btn-pantry-action danger" onclick="toggleStatus('${item.id}','out')">${item.status === 'out' ? 'Back In Stock' : 'Out of Stock'}</button>
-        <span style="flex:1;"></span>
+        ${needsRefillBtn}
+        ${oosBtn}
         <button class="icon-btn" onclick="editItem('${item.id}')" title="Edit">${ICON_EDIT}</button>
         <button class="icon-btn" onclick="deleteItemInline('${item.id}')" title="Delete">${ICON_TRASH}</button>
       </div>
@@ -809,7 +841,13 @@ function neededQtyForItem(item, mode){
   // mode === 'max'
   if (item.targetCount != null){
     const cur = item.currentCount || 0;
-    return Math.max(item.targetCount - cur, 0);
+    let qty = Math.max(item.targetCount - cur, 0);
+    // A percent-tracked item can still need refilling (status 'low'/'out')
+    // even when its unit count already meets targetCount — e.g. 1 bottle on
+    // hand meets a target of 1, but that bottle is nearly empty. Don't let
+    // the count math silently hide it from the max-stock estimate.
+    if (qty === 0 && needsRestock) qty = 1;
+    return qty;
   }
   return needsRestock ? 1 : 0;
 }
@@ -836,14 +874,35 @@ function renderRestockEstimate(){
 }
 
 /* ═══════════════════════════ MEAL PLANNER ═══════════════════════════
-   Meals belong to exactly one week (no recurrence). Each ingredient
-   carries its own bought flag directly. */
+   Meals belong to exactly one week (no recurrence). Ingredients live in a
+   shared per-week pool (weekIngredients) rather than embedded per-meal, so
+   the same ingredient can be assigned to multiple meals at once: it carries
+   ONE bought flag and ONE cost, shared by every meal that uses it. Typing
+   the same ingredient name into more than one meal (in the same week)
+   automatically links them to that same shared entry. */
+function getWeekIngredients(weekStart){
+  if (!weekIngredients[weekStart]) weekIngredients[weekStart] = [];
+  return weekIngredients[weekStart];
+}
+
+function mealIngredientsFor(meal){
+  return getWeekIngredients(meal.weekStart).filter(ing => ing.mealIds.includes(meal.id));
+}
+
+/* Removes a meal's membership from any shared ingredients, deleting
+   ingredients that end up with no meals left attached. */
+function unlinkMealIngredients(meal){
+  const list = getWeekIngredients(meal.weekStart);
+  list.forEach(ing => { ing.mealIds = ing.mealIds.filter(id => id !== meal.id); });
+  weekIngredients[meal.weekStart] = list.filter(ing => ing.mealIds.length > 0);
+  saveWeekIngredients();
+}
+
 function renderPlanner(){
   renderWeekNav();
   renderMealWeekList();
   renderGroceryList();
   renderPastMealsDropdown();
-  renderIngredientLibraryDropdown();
 }
 
 function renderWeekNav(){
@@ -868,15 +927,19 @@ function mealsForCurrentWeek(){
   return meals.filter(m => m.weekStart === currentWeekStart);
 }
 
-function computeMealStats(meal){
-  const total = meal.ingredients.length;
-  const bought = meal.ingredients.filter(ing => !!ing.bought).length;
+function computeMealStatsFromIngredients(ingredients){
+  const total = ingredients.length;
+  const bought = ingredients.filter(ing => !!ing.bought).length;
   let status, label;
   if (total === 0){ status = 'none'; label = 'No Ingredients'; }
   else if (bought === total){ status = 'complete'; label = 'Complete'; }
   else if (bought === 0){ status = 'missing'; label = 'Missing'; }
   else { status = 'partial'; label = 'Partial'; }
   return { total, bought, status, label };
+}
+
+function computeMealStats(meal){
+  return computeMealStatsFromIngredients(mealIngredientsFor(meal));
 }
 
 function renderMealWeekList(){
@@ -901,13 +964,8 @@ function renderMealWeekList(){
 }
 
 function renderMealCardHtml(meal){
-  const stats = computeMealStats(meal);
-  const chips = meal.ingredients.map(ing => {
-    return `<label class="ing-chip ${ing.bought ? 'bought' : ''}">
-      <input type="checkbox" ${ing.bought ? 'checked' : ''} onchange="toggleIngredientBought('${meal.id}','${ing.id}')" />
-      ${esc(ing.name)}${ing.cost != null ? ` <span class="ing-cost">₱${formatMoney(ing.cost)}</span>` : ''}
-    </label>`;
-  }).join('');
+  const ingredients = mealIngredientsFor(meal);
+  const stats = computeMealStatsFromIngredients(ingredients);
   const noteHtml = meal.note ? `<p class="meal-note">${esc(meal.note)}</p>` : '';
   return `
     <div class="meal-card">
@@ -919,7 +977,6 @@ function renderMealCardHtml(meal){
         <span class="meal-status ${stats.status}">${stats.label}</span>
       </div>
       ${noteHtml}
-      ${chips ? `<div class="meal-ingredient-chips">${chips}</div>` : ''}
       <div class="meal-card-actions">
         <button class="btn-sm btn-edit" onclick="editMeal('${meal.id}')">Edit</button>
         <button class="btn-sm btn-delete" onclick="deleteMealInline('${meal.id}')">Delete</button>
@@ -927,13 +984,14 @@ function renderMealCardHtml(meal){
     </div>`;
 }
 
-function toggleIngredientBought(mealId, ingId){
-  const meal = meals.find(m => m.id === mealId);
-  if (!meal) return;
-  const ing = meal.ingredients.find(i => i.id === ingId);
+/* Toggling bought here toggles the SHARED ingredient object, so every meal
+   that has this ingredient assigned reflects the change immediately. */
+function toggleIngredientBought(weekStart, ingId){
+  const list = getWeekIngredients(weekStart);
+  const ing = list.find(i => i.id === ingId);
   if (!ing) return;
   ing.bought = !ing.bought;
-  saveMeals();
+  saveWeekIngredients();
   renderMealWeekList();
   renderGroceryList();
 }
@@ -948,13 +1006,16 @@ function toggleExtraBought(extraId){
 }
 
 function renderGroceryList(){
-  const weekMeals = mealsForCurrentWeek().slice().sort((a, b) => a.day - b.day);
+  const weekList = getWeekIngredients(currentWeekStart);
   const rows = [];
-  weekMeals.forEach(m => {
-    m.ingredients.forEach(ing => rows.push({ mealName: m.name, ing, mealId: m.id, extra: false }));
+  weekList.forEach(ing => {
+    const mealNames = ing.mealIds
+      .map(id => { const m = meals.find(mm => mm.id === id); return m ? m.name : null; })
+      .filter(Boolean);
+    rows.push({ ing, mealName: mealNames.join(', ') || 'Other', extra: false });
   });
   const extras = extraGroceryItems[currentWeekStart] || [];
-  extras.forEach(ing => rows.push({ mealName: 'Other', ing, extra: true }));
+  extras.forEach(ing => rows.push({ ing, mealName: 'Other', extra: true }));
 
   rows.sort((a, b) => (a.ing.bought ? 1 : 0) - (b.ing.bought ? 1 : 0));
 
@@ -971,7 +1032,7 @@ function renderGroceryList(){
     return;
   }
   wrap.innerHTML = rows.map(r => {
-    const toggleCall = r.extra ? `toggleExtraBought('${r.ing.id}')` : `toggleIngredientBought('${r.mealId}','${r.ing.id}')`;
+    const toggleCall = r.extra ? `toggleExtraBought('${r.ing.id}')` : `toggleIngredientBought('${currentWeekStart}','${r.ing.id}')`;
     const deleteBtn = r.extra
       ? `<button class="icon-btn" onclick="deleteExtraGroceryItem('${r.ing.id}')" title="Remove">${ICON_TRASH}</button>`
       : '';
@@ -1003,7 +1064,6 @@ function addExtraGroceryItem(){
   qs('grocery-extra-name').value = '';
   qs('grocery-extra-cost').value = '';
   renderGroceryList();
-  renderIngredientLibraryDropdown();
 }
 
 function deleteExtraGroceryItem(id){
@@ -1043,16 +1103,40 @@ function addIngredientRow(name = '', cost = null, ingId = null){
     <input type="text" class="ing-name-input" list="ingredient-suggestions" placeholder="e.g. Chicken thighs" value="${esc(name)}" oninput="onIngredientNameInput(this)" />
     <input type="number" class="ing-cost-input" placeholder="₱ cost" min="0" step="0.01" value="${cost != null ? cost : ''}" />
     <button type="button" class="icon-btn" onclick="this.closest('.ingredient-row').remove()" title="Remove">${ICON_CLOSE}</button>
+    <div class="ing-shared-hint"></div>
   `;
   list.appendChild(row);
+  if (name) onIngredientNameInput(row.querySelector('.ing-name-input'));
 }
 
+/* Looks up whether the typed name already belongs to another meal in the
+   same week, so the row can hint that saving will share it (same bought
+   state & cost) with that meal instead of creating a duplicate. */
 function onIngredientNameInput(inputEl){
   const row = inputEl.closest('.ingredient-row');
   const costInput = row.querySelector('.ing-cost-input');
   const key = inputEl.value.trim().toLowerCase();
   if (key && ingredientLibrary[key] != null && costInput.value === ''){
     costInput.value = ingredientLibrary[key].cost != null ? ingredientLibrary[key].cost : '';
+  }
+
+  const hint = row.querySelector('.ing-shared-hint');
+  if (!hint) return;
+  const editingId = qs('editing-meal-id').value;
+  const editingMeal = editingId ? meals.find(m => m.id === editingId) : null;
+  const weekStart = editingMeal ? editingMeal.weekStart : currentWeekStart;
+  const weekList = getWeekIngredients(weekStart);
+  const match = key
+    ? weekList.find(w => w.id !== row.dataset.rowId && w.name.trim().toLowerCase() === key &&
+        (!editingMeal || !w.mealIds.includes(editingMeal.id)))
+    : null;
+  if (match){
+    const otherNames = match.mealIds
+      .map(id => { const m = meals.find(mm => mm.id === id); return m ? m.name : null; })
+      .filter(Boolean).join(', ');
+    hint.textContent = otherNames ? `Also used in: ${otherNames} — will share stock & purchase status` : '';
+  } else {
+    hint.textContent = '';
   }
 }
 
@@ -1066,8 +1150,9 @@ function editMeal(id){
   qs('meal-note').value = meal.note || '';
   qs('meal-ingredient-list').innerHTML = '';
   refreshIngredientSuggestions();
-  if (meal.ingredients.length === 0) addIngredientRow();
-  else meal.ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id));
+  const ingredients = mealIngredientsFor(meal);
+  if (ingredients.length === 0) addIngredientRow();
+  else ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id));
   qs('meal-delete-btn').style.display = 'block';
   qs('meal-modal-overlay').classList.remove('hidden');
 }
@@ -1098,23 +1183,60 @@ function saveMeal(){
   saveIngredientLibrary();
 
   const editingId = qs('editing-meal-id').value;
+  let meal;
+  let weekStart;
   if (editingId){
-    const meal = meals.find(m => m.id === editingId);
-    if (meal){
-      const oldIngredients = meal.ingredients;
-      meal.name = name;
-      meal.day = day;
-      meal.note = note;
-      meal.ingredients = collected.map(ni => {
-        const old = oldIngredients.find(oi => oi.id === ni.id);
-        return { id: ni.id, name: ni.name, cost: ni.cost, bought: old ? !!old.bought : false };
-      });
-    }
+    meal = meals.find(m => m.id === editingId);
+    if (!meal) return;
+    weekStart = meal.weekStart;
+    meal.name = name;
+    meal.day = day;
+    meal.note = note;
   } else {
-    const ingredients = collected.map(ing => Object.assign({ bought: false }, ing));
-    meals.push({ id: uid(), weekStart: currentWeekStart, day, name, note, ingredients });
+    weekStart = currentWeekStart;
+    meal = { id: uid(), weekStart, day, name, note };
+    meals.push(meal);
   }
+
+  // Link each collected row to a shared weekIngredient: reuse the one it
+  // already points to, merge into an existing same-named one from another
+  // meal this week (this is what makes multi-meal assignment automatic), or
+  // create a brand new one.
+  const weekList = getWeekIngredients(weekStart);
+  const keepIds = new Set();
+  collected.forEach(row => {
+    let wi = weekList.find(w => w.id === row.id);
+    if (wi){
+      wi.name = row.name;
+      if (row.cost != null) wi.cost = row.cost;
+      if (!wi.mealIds.includes(meal.id)) wi.mealIds.push(meal.id);
+      keepIds.add(wi.id);
+      return;
+    }
+    const key = row.name.trim().toLowerCase();
+    const match = weekList.find(w => w.name.trim().toLowerCase() === key && !w.mealIds.includes(meal.id));
+    if (match){
+      if (row.cost != null) match.cost = row.cost;
+      match.mealIds.push(meal.id);
+      keepIds.add(match.id);
+    } else {
+      const fresh = { id: row.id || uid(), name: row.name, cost: row.cost, bought: false, mealIds: [meal.id] };
+      weekList.push(fresh);
+      keepIds.add(fresh.id);
+    }
+  });
+
+  // Unlink ingredients this meal used to have but no longer does; drop any
+  // ingredient left with zero meals attached.
+  weekList.forEach(w => {
+    if (w.mealIds.includes(meal.id) && !keepIds.has(w.id)){
+      w.mealIds = w.mealIds.filter(id => id !== meal.id);
+    }
+  });
+  weekIngredients[weekStart] = weekList.filter(w => w.mealIds.length > 0);
+
   saveMeals();
+  saveWeekIngredients();
   closeMealModal();
   renderPlanner();
 }
@@ -1123,16 +1245,20 @@ function deleteMeal(){
   const id = qs('editing-meal-id').value;
   if (!id) return;
   if (!confirm('Delete this meal?')) return;
+  const meal = meals.find(m => m.id === id);
   meals = meals.filter(m => m.id !== id);
   saveMeals();
+  if (meal) unlinkMealIngredients(meal);
   closeMealModal();
   renderPlanner();
 }
 
 function deleteMealInline(id){
   if (!confirm('Delete this meal?')) return;
+  const meal = meals.find(m => m.id === id);
   meals = meals.filter(m => m.id !== id);
   saveMeals();
+  if (meal) unlinkMealIngredients(meal);
   renderPlanner();
 }
 
@@ -1150,84 +1276,46 @@ function renderPastMealsDropdown(){
     wrap.innerHTML = '<p class="empty-msg">No past meals yet.</p>';
     return;
   }
-  wrap.innerHTML = pastMeals.map(m => `
+  const dayOptions = DAY_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+  wrap.innerHTML = pastMeals.map(m => {
+    const count = mealIngredientsFor(m).length;
+    return `
     <div class="reuse-item">
       <div class="reuse-item-info">
         <div class="reuse-item-name">${esc(m.name)}</div>
-        <div class="reuse-item-meta">${formatWeekRange(m.weekStart)} · ${m.ingredients.length} ingredient${m.ingredients.length === 1 ? '' : 's'}</div>
+        <div class="reuse-item-meta">${formatWeekRange(m.weekStart)} · ${count} ingredient${count === 1 ? '' : 's'}</div>
       </div>
-      <button class="btn-sm btn-edit" onclick="reuseMeal('${m.id}')">Add to This Week</button>
-    </div>
-  `).join('');
+      <div class="reuse-item-actions">
+        <select class="reuse-day-select" data-meal-id="${m.id}" title="Day to apply it to">${dayOptions}</select>
+        <button class="btn-sm btn-edit" onclick="reuseMeal('${m.id}')">Add</button>
+      </div>
+    </div>`;
+  }).join('');
+  pastMeals.forEach(m => {
+    const sel = wrap.querySelector(`.reuse-day-select[data-meal-id="${m.id}"]`);
+    if (sel) sel.value = String(m.day);
+  });
 }
 
+/* Copies a past meal's ingredients into the current week with blank prices
+   (you re-price as you shop), placed on whichever day was picked in the
+   row's day selector. */
 function reuseMeal(id){
   const meal = meals.find(m => m.id === id);
   if (!meal) return;
-  const ingredients = meal.ingredients.map(ing => ({ id: uid(), name: ing.name, cost: ing.cost, bought: false }));
-  meals.push({ id: uid(), weekStart: currentWeekStart, day: meal.day, name: meal.name, ingredients });
+  const daySel = document.querySelector(`.reuse-day-select[data-meal-id="${id}"]`);
+  const day = daySel ? parseInt(daySel.value, 10) : meal.day;
+  const ingredients = mealIngredientsFor(meal);
+
+  const newMeal = { id: uid(), weekStart: currentWeekStart, day, name: meal.name, note: meal.note || '' };
+  meals.push(newMeal);
+  const weekList = getWeekIngredients(currentWeekStart);
+  ingredients.forEach(ing => {
+    weekList.push({ id: uid(), name: ing.name, cost: null, bought: false, mealIds: [newMeal.id] });
+  });
   saveMeals();
+  saveWeekIngredients();
   renderPlanner();
-}
-
-/* ─── ALL INGREDIENTS (LIBRARY) ─── */
-function renderIngredientLibraryDropdown(){
-  const wrap = qs('ingredient-library-list');
-  if (!wrap) return;
-  const search = (qs('ingredient-library-search').value || '').trim().toLowerCase();
-  const entries = Object.values(ingredientLibrary)
-    .filter(e => !search || e.name.toLowerCase().includes(search))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  if (entries.length === 0){
-    wrap.innerHTML = '<p class="empty-msg">No ingredients saved yet.</p>';
-    return;
-  }
-  wrap.innerHTML = entries.map(e => `
-    <div class="library-item">
-      <div class="library-item-info">
-        <div class="library-item-name">${esc(e.name)}</div>
-        <div class="library-item-meta">${e.cost != null ? '₱' + formatMoney(e.cost) : 'No saved price'}</div>
-      </div>
-      <div style="display:flex; gap:6px; flex-shrink:0;">
-        <button class="btn-sm btn-edit" onclick="addLibraryIngredientToGrocery('${esc(e.name).replace(/'/g, "\\'")}')">Add to List</button>
-        <button class="icon-btn" onclick="deleteLibraryIngredient('${esc(e.name).replace(/'/g, "\\'")}')" title="Delete">${ICON_TRASH}</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function deleteLibraryIngredient(name){
-  const key = name.toLowerCase();
-  if (!confirm(`Delete "${name}" from your saved ingredient list?`)) return;
-  const deleteEverywhere = confirm(
-    `Also remove "${name}" from every meal and week where it was already added?\n\n` +
-    `OK = delete it everywhere\n` +
-    `Cancel = just remove it from this saved list (existing meals keep it)`
-  );
-  delete ingredientLibrary[key];
-  saveIngredientLibrary();
-  if (deleteEverywhere){
-    meals.forEach(m => { m.ingredients = m.ingredients.filter(ing => ing.name.toLowerCase() !== key); });
-    saveMeals();
-    Object.keys(extraGroceryItems).forEach(w => {
-      extraGroceryItems[w] = (extraGroceryItems[w] || []).filter(ing => ing.name.toLowerCase() !== key);
-    });
-    saveExtraGroceryItems();
-    renderMealWeekList();
-    renderGroceryList();
-  }
-  renderIngredientLibraryDropdown();
-  refreshIngredientSuggestions();
-}
-
-function addLibraryIngredientToGrocery(name){
-  const entry = ingredientLibrary[name.toLowerCase()];
-  const cost = entry ? entry.cost : null;
-  if (!extraGroceryItems[currentWeekStart]) extraGroceryItems[currentWeekStart] = [];
-  extraGroceryItems[currentWeekStart].push({ id: uid(), name, cost, bought: false });
-  saveExtraGroceryItems();
-  renderGroceryList();
 }
 
 /* ─── CALENDAR / WEEK PICKER ─── */
@@ -1282,8 +1370,8 @@ function closeSettings(){ qs('settings-overlay').classList.add('hidden'); }
 
 function exportData(){
   const payload = {
-    items, types, meals, ingredientLibrary, extraGroceryItems, habits, incomeEntries, budgetItems,
-    exportedAt: new Date().toISOString(), version: 'stashimo-v0.6'
+    items, types, meals, weekIngredients, ingredientLibrary, extraGroceryItems, incomeEntries, budgetItems,
+    distPlanDate, exportedAt: new Date().toISOString(), version: 'stashimo-v0.7'
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1311,19 +1399,18 @@ function importData(event){
       items = data.items;
       types = data.types;
       meals = data.meals;
+      weekIngredients = data.weekIngredients || {};
       ingredientLibrary = data.ingredientLibrary || {};
       extraGroceryItems = data.extraGroceryItems || {};
-      habits = data.habits || [];
       incomeEntries = data.incomeEntries || [];
       budgetItems = data.budgetItems || [];
-      saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
-      saveHabits(); saveIncomeEntries(); saveBudgetItems();
+      distPlanDate = data.distPlanDate || toISODate(new Date());
+      saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
+      saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate();
       refreshTypeSelects();
       renderPantry();
       renderRestockEstimate();
       renderPlanner();
-      resetHabitForm();
-      renderHabitsPage();
       renderDistributor();
       closeSettings();
       alert('Import complete!');
@@ -1336,394 +1423,55 @@ function importData(event){
 }
 
 function resetAllData(){
-  if (!confirm('This will permanently erase all supplies, types, meal plans, habits, and distributor data. Continue?')) return;
+  if (!confirm('This will permanently erase all supplies, types, meal plans, and distributor data. Continue?')) return;
   items = [];
   meals = [];
+  weekIngredients = {};
   ingredientLibrary = {};
   extraGroceryItems = {};
   types = [{ id: uid(), name: 'Food' }];
-  habits = [];
   incomeEntries = [];
   budgetItems = [];
-  saveItems(); saveTypes(); saveMeals(); saveIngredientLibrary(); saveExtraGroceryItems();
-  saveHabits(); saveIncomeEntries(); saveBudgetItems();
+  distPlanDate = toISODate(new Date());
+  saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
+  saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate();
   refreshTypeSelects();
   renderPantry();
   renderRestockEstimate();
   renderPlanner();
-  resetHabitForm();
-  renderHabitsPage();
   renderDistributor();
   closeSettings();
 }
 
 /* ═══════════════════════════ TUTORIAL ═══════════════════════════ */
-function openTutorial(){ tutStep = 0; updateTutorialUI(); qs('tutorial-overlay').classList.remove('hidden'); }
+const TUT_STEP_FOR_PAGE = { pantry: 0, planner: 2, distributor: 3 };
+function openTutorial(){
+  tutStep = TUT_STEP_FOR_PAGE[currentPage] != null ? TUT_STEP_FOR_PAGE[currentPage] : 0;
+  updateTutorialUI();
+  qs('tutorial-overlay').classList.remove('hidden');
+}
 function closeTutorial(){ qs('tutorial-overlay').classList.add('hidden'); }
 function goToTutStep(i){ tutStep = i; updateTutorialUI(); }
 function tutNav(dir){
+  const total = document.querySelectorAll('.tutorial-step').length;
   const next = tutStep + dir;
-  if (next < 0 || next > 2) return;
+  if (next < 0 || next > total - 1) return;
   tutStep = next;
   updateTutorialUI();
 }
 function updateTutorialUI(){
+  const total = document.querySelectorAll('.tutorial-step').length;
   document.querySelectorAll('.tutorial-step').forEach((el, i) => el.classList.toggle('active', i === tutStep));
   document.querySelectorAll('.tut-dot').forEach((el, i) => el.classList.toggle('active', i === tutStep));
   qs('tut-prev').style.visibility = tutStep === 0 ? 'hidden' : 'visible';
   const nextBtn = qs('tut-next');
-  if (tutStep === 2){
+  if (tutStep === total - 1){
     nextBtn.textContent = 'Done';
     nextBtn.onclick = closeTutorial;
   } else {
     nextBtn.textContent = 'Next';
     nextBtn.onclick = () => tutNav(1);
   }
-}
-
-/* ═══════════════════════════ HABITS ═══════════════════════════ */
-function daysBetweenISO(aISO, bISO){
-  return Math.round((fromISODate(bISO) - fromISODate(aISO)) / 86400000);
-}
-
-/* Returns the 1-based occurrence number if `dateISO` is a scheduled
-   occurrence of `habit` (ignoring the "ends after N" cap), or null if it
-   is not a scheduled date at all (wrong day, before start, past an end date). */
-function habitOccurrenceIndex(habit, dateISO){
-  if (dateISO < habit.startDate) return null;
-  if (habit.endType === 'on' && habit.endDate && dateISO > habit.endDate) return null;
-
-  const interval = Math.max(1, habit.interval || 1);
-
-  if (habit.repeatType === 'once'){
-    return dateISO === habit.startDate ? 1 : null;
-  }
-
-  if (habit.repeatType === 'daily'){
-    const diff = daysBetweenISO(habit.startDate, dateISO);
-    if (diff % interval !== 0) return null;
-    return Math.floor(diff / interval) + 1;
-  }
-
-  if (habit.repeatType === 'weekly'){
-    const days = (habit.weeklyDays && habit.weeklyDays.length) ? habit.weeklyDays : [(fromISODate(habit.startDate).getDay() + 6) % 7];
-    const dow = (fromISODate(dateISO).getDay() + 6) % 7; // Monday = 0
-    if (!days.includes(dow)) return null;
-    const startMonday = toISODate(getMonday(fromISODate(habit.startDate)));
-    const targetMonday = toISODate(getMonday(fromISODate(dateISO)));
-    const weekDiff = Math.round((fromISODate(targetMonday) - fromISODate(startMonday)) / (7 * 86400000));
-    if (weekDiff < 0 || weekDiff % interval !== 0) return null;
-    // Count matching occurrences from the start up through this date to get the index.
-    let count = 0;
-    for (let w = 0; w <= weekDiff; w += interval){
-      const weekMonday = addDays(fromISODate(startMonday), w * 7);
-      const sortedDays = days.slice().sort((a, b) => a - b);
-      for (const d of sortedDays){
-        const occISO = toISODate(addDays(weekMonday, d));
-        if (occISO < habit.startDate) continue;
-        if (habit.endType === 'on' && habit.endDate && occISO > habit.endDate) continue;
-        if (occISO <= dateISO) count++;
-      }
-    }
-    return count > 0 ? count : null;
-  }
-
-  if (habit.repeatType === 'monthly'){
-    const d = fromISODate(dateISO);
-    const targetDay = habit.monthlyDay || fromISODate(habit.startDate).getDate();
-    if (d.getDate() !== targetDay) return null;
-    const s = fromISODate(habit.startDate);
-    const monthDiff = (d.getFullYear() - s.getFullYear()) * 12 + (d.getMonth() - s.getMonth());
-    if (monthDiff < 0 || monthDiff % interval !== 0) return null;
-    return Math.floor(monthDiff / interval) + 1;
-  }
-
-  if (habit.repeatType === 'yearly'){
-    const d = fromISODate(dateISO);
-    const s = fromISODate(habit.startDate);
-    if (d.getMonth() !== s.getMonth() || d.getDate() !== s.getDate()) return null;
-    const yearDiff = d.getFullYear() - s.getFullYear();
-    if (yearDiff < 0 || yearDiff % interval !== 0) return null;
-    return Math.floor(yearDiff / interval) + 1;
-  }
-
-  return null;
-}
-
-function habitOccursOnDate(habit, dateISO){
-  const idx = habitOccurrenceIndex(habit, dateISO);
-  if (idx === null) return false;
-  if (habit.endType === 'after' && habit.endCount != null && idx > habit.endCount) return false;
-  return true;
-}
-
-function formatHabitSchedule(habit){
-  const startLabel = fromISODate(habit.startDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-  let base;
-  if (habit.repeatType === 'once'){
-    base = 'Once on ' + startLabel;
-  } else if (habit.repeatType === 'daily'){
-    base = habit.interval === 1 ? 'Every day' : 'Every ' + habit.interval + ' days';
-  } else if (habit.repeatType === 'weekly'){
-    const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const days = (habit.weeklyDays || []).slice().sort((a,b)=>a-b).map(d => names[d]).join(', ');
-    base = (habit.interval === 1 ? 'Every week' : 'Every ' + habit.interval + ' weeks') + (days ? ' on ' + days : '');
-  } else if (habit.repeatType === 'monthly'){
-    base = (habit.interval === 1 ? 'Every month' : 'Every ' + habit.interval + ' months') + ' on day ' + habit.monthlyDay;
-  } else if (habit.repeatType === 'yearly'){
-    base = habit.interval === 1 ? 'Every year' : 'Every ' + habit.interval + ' years';
-  } else {
-    base = '';
-  }
-  if (habit.repeatType !== 'once'){
-    if (habit.endType === 'after') base += ', ends after ' + habit.endCount + ' times';
-    else if (habit.endType === 'on') base += ', ends ' + fromISODate(habit.endDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-  }
-  return base;
-}
-
-function changeHabitDay(delta){
-  currentHabitDate = toISODate(addDays(fromISODate(currentHabitDate), delta));
-  persistHabitDate();
-  renderHabitsPage();
-}
-function goToHabitToday(){
-  currentHabitDate = toISODate(new Date());
-  persistHabitDate();
-  renderHabitsPage();
-}
-
-function openHabitCalendar(){
-  habitCalViewDate = fromISODate(currentHabitDate);
-  renderHabitCalendar();
-  qs('habit-cal-overlay').classList.remove('hidden');
-}
-function closeHabitCalendar(){ qs('habit-cal-overlay').classList.add('hidden'); }
-function habitCalPrevMonth(){ habitCalViewDate = new Date(habitCalViewDate.getFullYear(), habitCalViewDate.getMonth()-1, 1); renderHabitCalendar(); }
-function habitCalNextMonth(){ habitCalViewDate = new Date(habitCalViewDate.getFullYear(), habitCalViewDate.getMonth()+1, 1); renderHabitCalendar(); }
-
-function renderHabitCalendar(){
-  const year = habitCalViewDate.getFullYear();
-  const month = habitCalViewDate.getMonth();
-  qs('habit-cal-month-label').textContent = new Date(year, month, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-  const todayISO = toISODate(new Date());
-
-  let html = '';
-  for (let i = 0; i < firstWeekday; i++) html += '<span class="cal-empty"></span>';
-  for (let d = 1; d <= daysInMonth; d++){
-    const dateObj = new Date(year, month, d);
-    const iso = toISODate(dateObj);
-    const classes = ['cal-day'];
-    if (iso === todayISO) classes.push('today');
-    if (iso === currentHabitDate) classes.push('selected-anchor');
-    const hasHabit = habits.some(h => habitOccursOnDate(h, iso));
-    if (hasHabit) classes.push('has-data');
-    html += `<span class="${classes.join(' ')}" onclick="selectHabitDate('${iso}')">${d}</span>`;
-  }
-  qs('habit-cal-grid').innerHTML = html;
-}
-
-function selectHabitDate(iso){
-  currentHabitDate = iso;
-  persistHabitDate();
-  renderHabitsPage();
-  closeHabitCalendar();
-}
-
-function renderHabitDateNav(){
-  const d = fromISODate(currentHabitDate);
-  qs('habit-date-text').textContent = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
-  const todayISO = toISODate(new Date());
-  qs('habit-date-sub').textContent = (currentHabitDate === todayISO) ? 'Today' : 'Tap to pick a date';
-  qs('habit-checklist-title').textContent = (currentHabitDate === todayISO) ? "Today's Habits" : 'Habits for This Day';
-}
-
-function onHabitRepeatTypeChange(){
-  const type = qs('habit-repeat-type').value;
-  qs('habit-interval-wrap').style.display = (type === 'once') ? 'none' : 'block';
-  qs('habit-weekly-days-wrap').style.display = (type === 'weekly') ? 'block' : 'none';
-  qs('habit-monthly-day-wrap').style.display = (type === 'monthly') ? 'block' : 'none';
-  qs('habit-end-wrap').style.display = (type === 'once') ? 'none' : 'block';
-  if (type === 'once'){
-    qs('habit-end-count-wrap').style.display = 'none';
-    qs('habit-end-date-wrap').style.display = 'none';
-  }
-}
-
-function onHabitEndTypeChange(){
-  const type = qs('habit-end-type').value;
-  qs('habit-end-count-wrap').style.display = (type === 'after') ? 'block' : 'none';
-  qs('habit-end-date-wrap').style.display = (type === 'on') ? 'block' : 'none';
-}
-
-function renderWeekdayPicker(selectedDays){
-  const sel = selectedDays || [];
-  const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const wrap = qs('habit-weekly-days');
-  wrap.dataset.selected = JSON.stringify(sel);
-  wrap.innerHTML = names.map((n, i) =>
-    `<button type="button" class="weekday-pill${sel.includes(i) ? ' selected' : ''}" data-day="${i}" onclick="toggleHabitWeekday(${i})">${n}</button>`
-  ).join('');
-}
-
-function toggleHabitWeekday(day){
-  const wrap = qs('habit-weekly-days');
-  let sel = JSON.parse(wrap.dataset.selected || '[]');
-  if (sel.includes(day)) sel = sel.filter(d => d !== day);
-  else sel.push(day);
-  renderWeekdayPicker(sel);
-}
-
-function resetHabitForm(){
-  qs('editing-habit-id').value = '';
-  qs('habit-name').value = '';
-  qs('habit-category').value = '';
-  qs('habit-description').value = '';
-  qs('habit-start-date').value = currentHabitDate;
-  qs('habit-repeat-type').value = 'once';
-  qs('habit-interval').value = '1';
-  qs('habit-monthly-day').value = '';
-  qs('habit-end-type').value = 'never';
-  qs('habit-end-count').value = '';
-  qs('habit-end-date').value = '';
-  renderWeekdayPicker([]);
-  onHabitRepeatTypeChange();
-  onHabitEndTypeChange();
-  qs('save-habit-btn').textContent = 'Save Habit';
-  qs('habit-delete-btn').style.display = 'none';
-}
-
-function saveHabit(){
-  const name = qs('habit-name').value.trim();
-  if (!name){ alert('Please enter a habit name.'); return; }
-  const category = qs('habit-category').value.trim();
-  const description = qs('habit-description').value.trim();
-  const startDate = qs('habit-start-date').value || currentHabitDate;
-  const repeatType = qs('habit-repeat-type').value;
-  const interval = Math.max(1, parseInt(qs('habit-interval').value, 10) || 1);
-  const weeklyDays = JSON.parse(qs('habit-weekly-days').dataset.selected || '[]');
-  const monthlyDay = qs('habit-monthly-day').value ? Math.min(31, Math.max(1, parseInt(qs('habit-monthly-day').value, 10))) : fromISODate(startDate).getDate();
-  const endType = repeatType === 'once' ? 'never' : qs('habit-end-type').value;
-  const endCount = qs('habit-end-count').value ? Math.max(1, parseInt(qs('habit-end-count').value, 10)) : null;
-  const endDate = qs('habit-end-date').value || null;
-
-  const editingId = qs('editing-habit-id').value;
-  if (editingId){
-    const h = habits.find(x => x.id === editingId);
-    if (h){
-      Object.assign(h, { name, category, description, startDate, repeatType, interval, weeklyDays, monthlyDay, endType, endCount, endDate });
-    }
-  } else {
-    habits.push({
-      id: uid(), name, category, description, startDate, repeatType, interval,
-      weeklyDays, monthlyDay, endType, endCount, endDate, completedDates: []
-    });
-  }
-  saveHabits();
-  resetHabitForm();
-  renderHabitsPage();
-}
-
-function editHabitInline(id){
-  const h = habits.find(x => x.id === id);
-  if (!h) return;
-  qs('editing-habit-id').value = h.id;
-  qs('habit-name').value = h.name;
-  qs('habit-category').value = h.category || '';
-  qs('habit-description').value = h.description || '';
-  qs('habit-start-date').value = h.startDate;
-  qs('habit-repeat-type').value = h.repeatType;
-  qs('habit-interval').value = h.interval || 1;
-  qs('habit-monthly-day').value = h.monthlyDay || '';
-  qs('habit-end-type').value = h.endType || 'never';
-  qs('habit-end-count').value = h.endCount != null ? h.endCount : '';
-  qs('habit-end-date').value = h.endDate || '';
-  renderWeekdayPicker(h.weeklyDays || []);
-  onHabitRepeatTypeChange();
-  onHabitEndTypeChange();
-  qs('save-habit-btn').textContent = 'Update Habit';
-  qs('habit-delete-btn').style.display = 'block';
-  qs('add-habit-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function deleteHabitFromForm(){
-  const id = qs('editing-habit-id').value;
-  if (!id) return;
-  deleteHabitInline(id);
-}
-
-function deleteHabitInline(id){
-  if (!confirm('Delete this habit?')) return;
-  habits = habits.filter(h => h.id !== id);
-  saveHabits();
-  resetHabitForm();
-  renderHabitsPage();
-}
-
-function toggleHabitDone(id){
-  const h = habits.find(x => x.id === id);
-  if (!h) return;
-  if (!h.completedDates) h.completedDates = [];
-  const idx = h.completedDates.indexOf(currentHabitDate);
-  if (idx >= 0) h.completedDates.splice(idx, 1);
-  else h.completedDates.push(currentHabitDate);
-  saveHabits();
-  renderHabitChecklist();
-}
-
-function renderHabitChecklist(){
-  const wrap = qs('habit-checklist');
-  const todays = habits.filter(h => habitOccursOnDate(h, currentHabitDate));
-  if (todays.length === 0){
-    wrap.innerHTML = '<p class="empty-msg">No habits scheduled for this day.</p>';
-    return;
-  }
-  wrap.innerHTML = todays.map(h => {
-    const done = (h.completedDates || []).includes(currentHabitDate);
-    return `
-    <div class="habit-item ${done ? 'done' : ''}">
-      <input type="checkbox" ${done ? 'checked' : ''} onchange="toggleHabitDone('${h.id}')" />
-      <div class="habit-item-info">
-        <div class="habit-item-name">${esc(h.name)}</div>
-        <div class="habit-item-meta">
-          ${h.category ? `<span class="habit-item-category">${esc(h.category)}</span>` : ''}
-        </div>
-        ${h.description ? `<div class="habit-item-desc">${esc(h.description)}</div>` : ''}
-      </div>
-      <div class="habit-item-actions">
-        <button class="icon-btn" onclick="editHabitInline('${h.id}')" title="Edit">${ICON_EDIT}</button>
-        <button class="icon-btn" onclick="deleteHabitInline('${h.id}')" title="Delete">${ICON_TRASH}</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderAllHabitsList(){
-  const wrap = qs('all-habits-list');
-  if (habits.length === 0){
-    wrap.innerHTML = '<p class="empty-msg">No habits yet.</p>';
-    return;
-  }
-  wrap.innerHTML = habits.map(h => `
-    <div class="all-habit-row">
-      <div class="all-habit-row-info">
-        <div class="all-habit-row-name">${esc(h.name)}</div>
-        <div class="all-habit-row-meta">${esc(formatHabitSchedule(h))}</div>
-      </div>
-      <div style="display:flex; gap:6px; flex-shrink:0;">
-        <button class="btn-sm btn-edit" onclick="editHabitInline('${h.id}')">Edit</button>
-        <button class="btn-sm btn-delete" onclick="deleteHabitInline('${h.id}')">Delete</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function renderHabitsPage(){
-  renderHabitDateNav();
-  renderHabitChecklist();
-  renderAllHabitsList();
 }
 
 /* ═══════════════════════════ DISTRIBUTOR ═══════════════════════════ */
@@ -1902,24 +1650,120 @@ function renderDistBudgetLists(){
     : '<p class="empty-msg">No debts or credit card purchases yet.</p>';
 }
 
+function renderDistPlanDateInput(){
+  qs('dist-plan-date').value = distPlanDate;
+}
+
+function onDistPlanDateChange(){
+  const val = qs('dist-plan-date').value;
+  distPlanDate = val || toISODate(new Date());
+  persistDistPlanDate();
+  renderDistributorSummary();
+}
+
 function renderDistributorSummary(){
   const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
   const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
-  const moneyLeft = totalIncome - totalItems;
-  qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
+  const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
 
-  const todayISO = toISODate(new Date());
-  const upcoming = incomeEntries.filter(e => e.date >= todayISO).sort((a, b) => a.date.localeCompare(b.date));
-  if (upcoming.length > 0){
-    const next = upcoming[0];
-    const label = fromISODate(next.date).toLocaleDateString('en-US', { month:'short', day:'numeric' });
-    qs('dist-next-salary').textContent = '₱' + formatMoney(next.amount) + ' on ' + label;
+  // Debts/credit purchases are financed rather than paid from cash on hand,
+  // so they're counted as income here — this cancels their own expense
+  // entry out of Money Left instead of dragging it negative.
+  const moneyLeft = totalIncome + totalDebtsAccrued - totalItems;
+  qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
+  qs('dist-debts-accrued').textContent = '₱' + formatMoney(totalDebtsAccrued);
+
+  const upcoming = incomeEntries.filter(e => e.date >= distPlanDate).sort((a, b) => a.date.localeCompare(b.date));
+  qs('dist-expected-salary').textContent = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
+}
+
+/* Plain-text snapshot of the whole Distributor tab, for the copy/export
+   buttons — a quick reference you can paste or save elsewhere. */
+function buildDistributorPlanText(){
+  const planDateLabel = fromISODate(distPlanDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
+  const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
+  const moneyLeft = totalIncome + totalDebtsAccrued - totalItems;
+  const upcoming = incomeEntries.filter(e => e.date >= distPlanDate).sort((a, b) => a.date.localeCompare(b.date));
+  const expectedSalary = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
+
+  const lines = [];
+  lines.push('STASHIMO — Distributor Plan');
+  lines.push('Plan Date: ' + planDateLabel);
+  lines.push('');
+  lines.push('Money Left: ₱' + formatMoney(moneyLeft));
+  lines.push('Expected Salary: ' + expectedSalary);
+  lines.push('Debts Accrued: ₱' + formatMoney(totalDebtsAccrued));
+  lines.push('');
+
+  lines.push('Income:');
+  if (incomeEntries.length === 0) lines.push('  (none)');
+  else incomeEntries.slice().sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
+    lines.push(`  - ${e.name}: ₱${formatMoney(e.amount)} (${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })})`);
+  });
+  lines.push('');
+
+  const regular = budgetItems.filter(i => !i.isDebt);
+  lines.push('Planned Items:');
+  if (regular.length === 0) lines.push('  (none)');
+  else regular.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
+    const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
+    lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
+  });
+  lines.push('');
+
+  const debts = budgetItems.filter(i => i.isDebt);
+  lines.push('Debts & Credit Card Purchases:');
+  if (debts.length === 0) lines.push('  (none)');
+  else debts.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
+    const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
+    lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
+  });
+
+  return lines.join('\n');
+}
+
+function copyDistributorPlan(){
+  const text = buildDistributorPlanText();
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(
+      () => alert('Plan copied to clipboard.'),
+      () => fallbackCopyText(text)
+    );
   } else {
-    qs('dist-next-salary').textContent = 'None planned';
+    fallbackCopyText(text);
   }
 }
 
+function fallbackCopyText(text){
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); alert('Plan copied to clipboard.'); }
+  catch(e){ alert('Could not copy automatically — use Export Plan instead.'); }
+  document.body.removeChild(ta);
+}
+
+function exportDistributorPlan(){
+  const text = buildDistributorPlanText();
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stashimo-distributor-plan-' + distPlanDate + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function renderDistributor(){
+  renderDistPlanDateInput();
   renderDistributorSummary();
   renderDistIncomeList();
   renderDistBudgetLists();
@@ -1931,8 +1775,6 @@ refreshTypeSelects();
 renderPantry();
 renderRestockEstimate();
 renderPlanner();
-resetHabitForm();
-renderHabitsPage();
 renderDistributor();
 
 if (!localStorage.getItem(LS_KEYS.tut)){

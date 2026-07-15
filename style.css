@@ -188,13 +188,13 @@ button:active { transform: scale(0.97); }
 
 .pantry-item {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; transition: border-color 0.15s;
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; transition: border-color 0.15s;
 }
 .pantry-item:last-child { margin-bottom: 0; }
-.pantry-item.status-out { opacity: 0.72; }
-.pantry-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.pantry-item-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
-.pantry-item-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pantry-item.status-out .pantry-item-name { opacity: 0.6; }
+.pantry-item-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 10px; margin-bottom: 6px; }
+.pantry-item-name { font-size: 14px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pantry-item-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 .pantry-count { font-size: 11px; color: var(--text-mid); font-weight: 500; }
 .pantry-count strong { color: var(--text); }
 .pct-bar-wrap { height: 5px; background: var(--accent-dim); border-radius: 5px; overflow: hidden; margin-top: 6px; width: 100%; }
@@ -207,13 +207,19 @@ button:active { transform: scale(0.97); }
 .status-badge.low { background: var(--warning-dim); color: var(--warning); }
 .status-badge.out { background: var(--danger-dim); color: var(--danger); }
 
-.pantry-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.btn-pantry-action { background: var(--accent-dim); color: var(--text-mid); border: 1px solid var(--input-border); border-radius: 7px; padding: 6px 11px; font-size: 12px; font-weight: 500; box-shadow: none; }
+.pantry-actions {
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 8px;
+}
+.pantry-actions > * { flex-shrink: 0; }
+.btn-pantry-action { background: var(--accent-dim); color: var(--text-mid); border: 1px solid var(--input-border); border-radius: 6px; padding: 4px 7px; font-size: 10.5px; font-weight: 500; box-shadow: none; white-space: nowrap; }
 .btn-pantry-action:hover { background: var(--border); color: #fff; opacity: 1; box-shadow: none; }
 .btn-pantry-action.danger { color: var(--danger); }
 .btn-pantry-action.danger:hover { background: var(--danger); color: #fff; }
 .btn-pantry-action.warn { color: var(--warning); }
 .btn-pantry-action.warn:hover { background: var(--warning); color: #fff; }
+.pantry-actions .icon-btn { padding: 4px 6px; border: 1px solid var(--input-border); border-radius: 6px; }
+.pantry-actions .icon-btn svg { width: 12px; height: 12px; }
+
 .pantry-item-icons { display: flex; gap: 4px; flex-shrink: 0; }
 .icon-btn { background: none; color: var(--text-dim); border: none; box-shadow: none; padding: 4px 6px; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn:hover { color: var(--text); opacity: 1; box-shadow: none; }
@@ -249,11 +255,13 @@ button:active { transform: scale(0.97); }
 .modal-actions button { flex: 1; }
 
 /* ─── INGREDIENT LIST IN MEAL MODAL ─── */
-.ingredient-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ingredient-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .ingredient-row input[type="text"] { flex: 2; }
 .ingredient-row input[type="number"] { flex: 1; }
 .ingredient-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
 .ingredient-row .icon-btn { flex-shrink: 0; font-size: 15px; }
+.ing-shared-hint { flex-basis: 100%; font-size: 11px; color: var(--text-dim); margin-top: -2px; }
+.ing-shared-hint:empty { display: none; }
 .ingredient-list-wrap { display: flex; flex-direction: column; gap: 0; margin-bottom: 6px; }
 .btn-add-ingredient { width: 100%; background: var(--accent-dim); color: var(--text); border: 1px dashed var(--border-lite); box-shadow: none; font-size: 13px; font-weight: 500; margin-top: 4px; }
 .btn-add-ingredient:hover { background: var(--accent2-dim); opacity: 1; box-shadow: none; }
@@ -306,11 +314,6 @@ button:active { transform: scale(0.97); }
 .meal-ingredient-count { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 .meal-note { font-size: 12px; color: var(--text-mid); background: var(--accent-dim); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; white-space: pre-wrap; }
 .meal-card-actions { display: flex; gap: 6px; margin-top: 10px; }
-.meal-ingredient-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-.ing-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; color: var(--text-mid); background: var(--bg); border: 1px solid var(--input-border); border-radius: 999px; padding: 3px 9px; }
-.ing-chip.bought { text-decoration: line-through; opacity: 0.6; }
-.ing-chip .ing-cost { color: var(--text-dim); font-weight: 600; }
-.ing-chip input[type="checkbox"] { width: 13px; height: 13px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
 
 /* ─── GROCERY LIST ─── */
 .grocery-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
@@ -330,33 +333,6 @@ button:active { transform: scale(0.97); }
 .grocery-item-meal { font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
 .grocery-item-cost { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
 .grocery-item.bought .grocery-item-cost { color: var(--text-dim); }
-
-/* ─── WEEKDAY PICKER (Habits) ─── */
-.weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; }
-.weekday-pill {
-  background: var(--surface); color: var(--text-mid); border: 1px solid var(--input-border); border-radius: 8px;
-  padding: 8px 0; font-size: 12px; font-weight: 600; box-shadow: none; width: 40px; text-align: center;
-}
-.weekday-pill.selected { background: var(--border); color: #fff; border-color: var(--border); }
-.weekday-pill:hover:not(.selected) { background: var(--accent-dim); opacity: 1; box-shadow: none; }
-
-/* ─── HABIT CHECKLIST ─── */
-.habit-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--input-border); }
-.habit-item:last-child { border-bottom: none; }
-.habit-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; margin-top: 1px; }
-.habit-item-info { flex: 1; min-width: 0; }
-.habit-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
-.habit-item.done .habit-item-name { text-decoration: line-through; color: var(--text-dim); }
-.habit-item-meta { display: flex; gap: 6px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
-.habit-item-category { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-mid); background: var(--accent-dim); border-radius: 6px; padding: 2px 8px; }
-.habit-item-desc { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
-.habit-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
-
-.all-habit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
-.all-habit-row:last-child { border-bottom: none; }
-.all-habit-row-info { min-width: 0; flex: 1; }
-.all-habit-row-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
-.all-habit-row-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* ─── DISTRIBUTOR LIST ITEMS ─── */
 .dist-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
@@ -391,14 +367,16 @@ button:active { transform: scale(0.97); }
 .collapsible-body.hidden { display: none; }
 .collapsible-body input[type="text"] { margin-bottom: 12px; }
 
-.reuse-item, .library-item {
+.reuse-item {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 0; border-bottom: 1px solid var(--input-border);
 }
-.reuse-item:last-child, .library-item:last-child { border-bottom: none; }
-.reuse-item-info, .library-item-info { min-width: 0; flex: 1; }
-.reuse-item-name, .library-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
-.reuse-item-meta, .library-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.reuse-item:last-child { border-bottom: none; }
+.reuse-item-info { min-width: 0; flex: 1; }
+.reuse-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.reuse-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.reuse-item-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.reuse-day-select { min-height: 34px; padding: 4px 6px; font-size: 12px; width: auto; }
 
 /* ─── TYPE FILTER (checklist) ─── */
 .btn-type-filter { background: var(--accent-dim); color: var(--text-mid); border: 1px solid var(--input-border); box-shadow: none; font-size: 13px; font-weight: 500; padding: 10px 14px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
@@ -426,6 +404,10 @@ button:active { transform: scale(0.97); }
 .settings-row:last-child { border-bottom: none; }
 .settings-row-label { font-size: 14px; font-weight: 600; color: var(--text); }
 .settings-row-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+.type-manage-row { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--input-border); }
+.type-manage-row:last-child { border-bottom: none; }
+.type-manage-row-actions { display: flex; gap: 6px; }
 
 /* ─── HELP BUTTON ─── */
 .help-btn {
@@ -495,7 +477,8 @@ footer { padding-bottom: max(24px, env(safe-area-inset-bottom)); padding-left: m
   .card { padding: 16px 14px; }
 
   button:not(.help-btn):not(.color-swatch):not(.btn-header-settings), .nav-tab, .bottom-nav-btn, input[type="text"], input[type="number"], select { min-height: 44px; }
-  .btn-edit, .btn-delete, .btn-sm { min-height: 38px; }
+  .btn-edit, .btn-delete, .btn-sm { min-height: 38px !important; }
+  .pantry-actions .btn-pantry-action, .pantry-actions .icon-btn { min-height: 27px !important; padding: 4px 7px !important; }
   .color-swatch { min-height: 0; width: 30px; height: 30px; }
   .btn-header-settings { padding: 6px 11px; font-size: 11px; min-height: 0; height: auto; line-height: 1.3; }
 
@@ -506,7 +489,6 @@ footer { padding-bottom: max(24px, env(safe-area-inset-bottom)); padding-left: m
   .section-header-row > .header-row-actions { width: 100%; justify-content: space-between; }
   #pantry-search { flex: 1; width: auto; }
 
-  .pantry-item-top { flex-wrap: wrap; }
   .grocery-summary { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .grocery-stat { padding: 10px 4px; }
   .grocery-stat-val { font-size: 14px; }
