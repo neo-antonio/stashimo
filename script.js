@@ -1769,10 +1769,7 @@ function renderDistributorSummary(){
   const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
   const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
 
-  // Debts/credit purchases are financed rather than paid from cash on hand,
-  // so they're counted as income here — this cancels their own expense
-  // entry out of Money Left instead of dragging it negative.
-  const moneyLeft = totalIncome + totalDebtsAccrued - totalItems;
+  const moneyLeft = totalIncome - totalItems;
   qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
   qs('dist-debts-accrued').textContent = '₱' + formatMoney(totalDebtsAccrued);
 
@@ -1787,7 +1784,7 @@ function buildDistributorPlanText(){
   const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
   const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
   const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
-  const moneyLeft = totalIncome + totalDebtsAccrued - totalItems;
+  const moneyLeft = totalIncome - totalItems;
   const upcoming = incomeEntries.filter(e => e.date >= distPlanDate).sort((a, b) => a.date.localeCompare(b.date));
   const expectedSalary = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
 
