@@ -26,6 +26,7 @@ const LS_KEYS = {
   income: 'stashimo_income',
   budgetItems: 'stashimo_budget_items',
   distPlanDate: 'stashimo_dist_plan_date',
+  distNotes: 'stashimo_dist_notes',
   // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
   legacyPrice: 'stashimo_price_memory',
@@ -92,6 +93,7 @@ let pantryExpanded = localStorage.getItem(LS_KEYS.pantryExpanded) === '1';
 let incomeEntries = loadJSON(LS_KEYS.income, []);
 let budgetItems = loadJSON(LS_KEYS.budgetItems, []);
 let distPlanDate = localStorage.getItem(LS_KEYS.distPlanDate) || toISODate(new Date());
+let distNotes = localStorage.getItem(LS_KEYS.distNotes) || '';
 let selectedTypeFilters = null; // Set of type ids (+ 'none' for orphans) currently shown; null = not yet initialized
 let calViewDate = fromISODate(currentWeekStart);
 let tutStep = 0;
@@ -221,6 +223,7 @@ function saveIncomeEntries(){ localStorage.setItem(LS_KEYS.income, JSON.stringif
 function saveBudgetItems(){ localStorage.setItem(LS_KEYS.budgetItems, JSON.stringify(budgetItems)); }
 function persistCurrentWeek(){ localStorage.setItem(LS_KEYS.week, currentWeekStart); }
 function persistDistPlanDate(){ localStorage.setItem(LS_KEYS.distPlanDate, distPlanDate); }
+function persistDistNotes(){ localStorage.setItem(LS_KEYS.distNotes, distNotes); }
 
 /* ─── PAGE NAV ─── */
 const PAGE_ORDER = ['pantry', 'planner', 'distributor'];
@@ -795,12 +798,14 @@ function renderItemCardHtml(item){
     if (isPercent && item.currentCount === 1){
       trackedActions = `<button class="btn-pantry-action" onclick="adjustPercent('${item.id}', -10)">−10%</button>
          <button class="btn-pantry-action" onclick="setPercentDirectly('${item.id}')">Edit %</button>
-         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+1</button>`;
     } else if (isPercent && item.currentCount === 0){
-      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+1</button>`;
+    } else if (item.status === 'out'){
+      trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+1</button>`;
     } else {
       trackedActions = `<button class="btn-pantry-action" onclick="adjustCount('${item.id}', -1)">−Used</button>
-         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+Restock</button>`;
+         <button class="btn-pantry-action" onclick="adjustCount('${item.id}', 1)">+1</button>`;
     }
   }
 
@@ -1043,10 +1048,64 @@ function renderGroceryList(){
         <div class="grocery-item-name">${esc(r.ing.name)}</div>
         <div class="grocery-item-meal">${esc(r.mealName)}</div>
       </div>
-      <div class="grocery-item-cost">${r.ing.cost != null ? '₱' + formatMoney(r.ing.cost) : '-'}</div>
+      <div class="grocery-item-cost" onclick="startEditGroceryCost(this,'${r.ing.id}',${r.extra})" title="Tap to edit price">${r.ing.cost != null ? '₱' + formatMoney(r.ing.cost) : 'Set price'}</div>
       ${deleteBtn}
     </div>`;
   }).join('');
+}
+
+/* Editing a shared ingredient's price here edits the ONE underlying object
+   that every connected meal points to, so the change reflects everywhere
+   automatically. (Extra/non-meal items just edit their own cost directly.) */
+function startEditGroceryCost(el, ingId, isExtra){
+  const current = isExtra
+    ? (extraGroceryItems[currentWeekStart] || []).find(i => i.id === ingId)
+    : getWeekIngredients(currentWeekStart).find(i => i.id === ingId);
+  if (!current) return;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '0.01';
+  input.className = 'grocery-item-cost-input';
+  input.value = current.cost != null ? current.cost : '';
+  input.placeholder = '₱';
+  el.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let committed = false;
+  const commit = () => {
+    if (committed) return;
+    committed = true;
+    const raw = input.value;
+    const newCost = raw === '' ? null : Math.max(0, parseFloat(raw));
+    commitGroceryItemCost(ingId, isExtra, newCost);
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ input.blur(); }
+    else if (e.key === 'Escape'){ committed = true; renderGroceryList(); }
+  });
+}
+
+function commitGroceryItemCost(ingId, isExtra, newCost){
+  if (isExtra){
+    const list = extraGroceryItems[currentWeekStart] || [];
+    const item = list.find(i => i.id === ingId);
+    if (item) item.cost = newCost;
+    saveExtraGroceryItems();
+  } else {
+    const list = getWeekIngredients(currentWeekStart);
+    const ing = list.find(i => i.id === ingId);
+    if (ing){
+      ing.cost = newCost;
+      if (newCost != null) ingredientLibrary[ing.name.trim().toLowerCase()] = { name: ing.name, cost: newCost };
+    }
+    saveWeekIngredients();
+    saveIngredientLibrary();
+  }
+  renderGroceryList();
 }
 
 function addExtraGroceryItem(){
@@ -1079,6 +1138,18 @@ function refreshIngredientSuggestions(){
   qs('ingredient-suggestions').innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
 }
 
+/* The "prefill" people notice when typing an ingredient name they've used
+   before is ingredientLibrary — a running memory of names -> last price,
+   used to autofill the cost field and power the suggestion dropdown. This
+   clears it without touching any actual meals or grocery items. */
+function clearIngredientLibrary(){
+  if (!confirm('This clears all saved ingredient names & prices used for autofill suggestions. Your meals and grocery list are not affected. Continue?')) return;
+  ingredientLibrary = {};
+  saveIngredientLibrary();
+  refreshIngredientSuggestions();
+  alert('Saved ingredient suggestions cleared.');
+}
+
 function openMealModal(){
   qs('meal-modal-title').textContent = 'Add Meal';
   qs('editing-meal-id').value = '';
@@ -1093,20 +1164,36 @@ function openMealModal(){
 }
 function closeMealModal(){ qs('meal-modal-overlay').classList.add('hidden'); }
 
-function addIngredientRow(name = '', cost = null, ingId = null){
+/* When an ingredient is shared by more than one meal, its stored `cost` is
+   the TOTAL price (edited from the Grocery List). Each meal's row shows its
+   share of that total, split evenly and rounded UP to the nearest ₱5 so it
+   always ends in 0 or 5. */
+function perMealShare(cost, mealCount){
+  if (cost == null) return null;
+  if (!mealCount || mealCount <= 1) return cost;
+  return Math.ceil((cost / mealCount) / 5) * 5;
+}
+
+function addIngredientRow(name = '', cost = null, ingId = null, mealCount = 0){
   const list = qs('meal-ingredient-list');
   const rowId = ingId || uid();
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.rowId = rowId;
+  const locked = !!ingId && mealCount > 1;
+  const displayCost = locked ? perMealShare(cost, mealCount) : cost;
+  if (locked) row.dataset.costLocked = '1';
+  const lockedHint = locked
+    ? `Shared with ${mealCount - 1} other meal${mealCount - 1 === 1 ? '' : 's'}: showing your ₱${formatMoney(displayCost)} share of the ₱${formatMoney(cost)} total. Edit the total price from the Grocery List.`
+    : '';
   row.innerHTML = `
     <input type="text" class="ing-name-input" list="ingredient-suggestions" placeholder="e.g. Chicken thighs" value="${esc(name)}" oninput="onIngredientNameInput(this)" />
-    <input type="number" class="ing-cost-input" placeholder="₱ cost" min="0" step="0.01" value="${cost != null ? cost : ''}" />
+    <input type="number" class="ing-cost-input" placeholder="₱ cost" min="0" step="0.01" value="${displayCost != null ? displayCost : ''}" ${locked ? 'disabled title="Shared ingredient. Edit the total price from the Grocery List"' : ''} />
     <button type="button" class="icon-btn" onclick="this.closest('.ingredient-row').remove()" title="Remove">${ICON_CLOSE}</button>
-    <div class="ing-shared-hint"></div>
+    <div class="ing-shared-hint">${lockedHint}</div>
   `;
   list.appendChild(row);
-  if (name) onIngredientNameInput(row.querySelector('.ing-name-input'));
+  if (name && !locked) onIngredientNameInput(row.querySelector('.ing-name-input'));
 }
 
 /* Looks up whether the typed name already belongs to another meal in the
@@ -1134,7 +1221,7 @@ function onIngredientNameInput(inputEl){
     const otherNames = match.mealIds
       .map(id => { const m = meals.find(mm => mm.id === id); return m ? m.name : null; })
       .filter(Boolean).join(', ');
-    hint.textContent = otherNames ? `Also used in: ${otherNames} — will share stock & purchase status` : '';
+    hint.textContent = otherNames ? `Also used in: ${otherNames}. Will share stock & purchase status.` : '';
   } else {
     hint.textContent = '';
   }
@@ -1152,7 +1239,7 @@ function editMeal(id){
   refreshIngredientSuggestions();
   const ingredients = mealIngredientsFor(meal);
   if (ingredients.length === 0) addIngredientRow();
-  else ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id));
+  else ingredients.forEach(ing => addIngredientRow(ing.name, ing.cost, ing.id, ing.mealIds.length));
   qs('meal-delete-btn').style.display = 'block';
   qs('meal-modal-overlay').classList.remove('hidden');
 }
@@ -1164,7 +1251,8 @@ function collectIngredientsFromModal(){
     if (!name) return null;
     const costRaw = row.querySelector('.ing-cost-input').value;
     const cost = costRaw === '' ? null : Math.max(0, parseFloat(costRaw));
-    return { id: row.dataset.rowId, name, cost };
+    const locked = row.dataset.costLocked === '1';
+    return { id: row.dataset.rowId, name, cost, locked };
   }).filter(Boolean);
 }
 
@@ -1176,7 +1264,7 @@ function saveMeal(){
   const collected = collectIngredientsFromModal();
 
   collected.forEach(ing => {
-    if (ing.cost != null){
+    if (ing.cost != null && !ing.locked){
       ingredientLibrary[ing.name.trim().toLowerCase()] = { name: ing.name.trim(), cost: ing.cost };
     }
   });
@@ -1208,7 +1296,7 @@ function saveMeal(){
     let wi = weekList.find(w => w.id === row.id);
     if (wi){
       wi.name = row.name;
-      if (row.cost != null) wi.cost = row.cost;
+      if (row.cost != null && !row.locked) wi.cost = row.cost;
       if (!wi.mealIds.includes(meal.id)) wi.mealIds.push(meal.id);
       keepIds.add(wi.id);
       return;
@@ -1276,7 +1364,7 @@ function renderPastMealsDropdown(){
     wrap.innerHTML = '<p class="empty-msg">No past meals yet.</p>';
     return;
   }
-  const dayOptions = DAY_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+  const dayOptions = DAY_NAMES.map((n, i) => `<option value="${i}">${n.slice(0, 3)}</option>`).join('');
   wrap.innerHTML = pastMeals.map(m => {
     const count = mealIngredientsFor(m).length;
     return `
@@ -1371,7 +1459,7 @@ function closeSettings(){ qs('settings-overlay').classList.add('hidden'); }
 function exportData(){
   const payload = {
     items, types, meals, weekIngredients, ingredientLibrary, extraGroceryItems, incomeEntries, budgetItems,
-    distPlanDate, exportedAt: new Date().toISOString(), version: 'stashimo-v0.7'
+    distPlanDate, distNotes, exportedAt: new Date().toISOString(), version: 'stashimo-v0.8'
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1405,8 +1493,9 @@ function importData(event){
       incomeEntries = data.incomeEntries || [];
       budgetItems = data.budgetItems || [];
       distPlanDate = data.distPlanDate || toISODate(new Date());
+      distNotes = data.distNotes || '';
       saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
-      saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate();
+      saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate(); persistDistNotes();
       refreshTypeSelects();
       renderPantry();
       renderRestockEstimate();
@@ -1433,8 +1522,9 @@ function resetAllData(){
   incomeEntries = [];
   budgetItems = [];
   distPlanDate = toISODate(new Date());
+  distNotes = '';
   saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
-  saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate();
+  saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate(); persistDistNotes();
   refreshTypeSelects();
   renderPantry();
   renderRestockEstimate();
@@ -1480,6 +1570,7 @@ function resetIncomeForm(){
   qs('income-name').value = '';
   qs('income-date').value = '';
   qs('income-amount').value = '';
+  qs('income-note').value = '';
   qs('save-income-btn').textContent = 'Save Income';
   qs('income-delete-btn').style.display = 'none';
 }
@@ -1491,13 +1582,14 @@ function saveIncome(){
   if (!date){ alert('Please choose an expected date.'); return; }
   const amountRaw = qs('income-amount').value;
   const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
+  const note = qs('income-note').value.trim();
 
   const editingId = qs('editing-income-id').value;
   if (editingId){
     const entry = incomeEntries.find(e => e.id === editingId);
-    if (entry) Object.assign(entry, { name, date, amount });
+    if (entry) Object.assign(entry, { name, date, amount, note });
   } else {
-    incomeEntries.push({ id: uid(), name, date, amount });
+    incomeEntries.push({ id: uid(), name, date, amount, note });
   }
   saveIncomeEntries();
   resetIncomeForm();
@@ -1511,6 +1603,7 @@ function editIncomeInline(id){
   qs('income-name').value = entry.name;
   qs('income-date').value = entry.date;
   qs('income-amount').value = entry.amount;
+  qs('income-note').value = entry.note || '';
   qs('save-income-btn').textContent = 'Update Income';
   qs('income-delete-btn').style.display = 'block';
   qs('add-income-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1539,6 +1632,7 @@ function resetBudgetItemForm(){
   qs('budget-item-date').value = '';
   qs('budget-item-amount').value = '';
   qs('budget-item-is-debt').checked = false;
+  qs('budget-item-note').value = '';
   qs('save-budget-item-btn').textContent = 'Save Item';
   qs('budget-item-delete-btn').style.display = 'none';
 }
@@ -1550,13 +1644,14 @@ function saveBudgetItem(){
   const amountRaw = qs('budget-item-amount').value;
   const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
   const isDebt = qs('budget-item-is-debt').checked;
+  const note = qs('budget-item-note').value.trim();
 
   const editingId = qs('editing-budget-item-id').value;
   if (editingId){
     const item = budgetItems.find(i => i.id === editingId);
-    if (item) Object.assign(item, { name, date, amount, isDebt });
+    if (item) Object.assign(item, { name, date, amount, isDebt, note });
   } else {
-    budgetItems.push({ id: uid(), name, date, amount, isDebt, paid: false });
+    budgetItems.push({ id: uid(), name, date, amount, isDebt, note, paid: false });
   }
   saveBudgetItems();
   resetBudgetItemForm();
@@ -1571,6 +1666,7 @@ function editBudgetItemInline(id){
   qs('budget-item-date').value = item.date || '';
   qs('budget-item-amount').value = item.amount;
   qs('budget-item-is-debt').checked = !!item.isDebt;
+  qs('budget-item-note').value = item.note || '';
   qs('save-budget-item-btn').textContent = 'Update Item';
   qs('budget-item-delete-btn').style.display = 'block';
   qs('add-budget-item-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1613,6 +1709,7 @@ function renderDistIncomeList(){
       <div class="dist-item-info">
         <div class="dist-item-name">${esc(e.name)}</div>
         <div class="dist-item-meta">${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</div>
+        ${e.note ? `<div class="dist-item-note">${esc(e.note)}</div>` : ''}
       </div>
       <div class="dist-item-amount">₱${formatMoney(e.amount)}</div>
       <div class="dist-item-actions">
@@ -1633,6 +1730,7 @@ function renderDistBudgetLists(){
       <div class="dist-item-info">
         <div class="dist-item-name">${esc(i.name)}</div>
         <div class="dist-item-meta">${i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set'}</div>
+        ${i.note ? `<div class="dist-item-note">${esc(i.note)}</div>` : ''}
       </div>
       <div class="dist-item-amount">₱${formatMoney(i.amount)}</div>
       <div class="dist-item-actions">
@@ -1659,6 +1757,11 @@ function onDistPlanDateChange(){
   distPlanDate = val || toISODate(new Date());
   persistDistPlanDate();
   renderDistributorSummary();
+}
+
+function onDistNotesChange(){
+  distNotes = qs('dist-other-notes').value;
+  persistDistNotes();
 }
 
 function renderDistributorSummary(){
@@ -1689,7 +1792,7 @@ function buildDistributorPlanText(){
   const expectedSalary = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
 
   const lines = [];
-  lines.push('STASHIMO — Distributor Plan');
+  lines.push('STASHIMO - Distributor Plan');
   lines.push('Plan Date: ' + planDateLabel);
   lines.push('');
   lines.push('Money Left: ₱' + formatMoney(moneyLeft));
@@ -1701,6 +1804,7 @@ function buildDistributorPlanText(){
   if (incomeEntries.length === 0) lines.push('  (none)');
   else incomeEntries.slice().sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
     lines.push(`  - ${e.name}: ₱${formatMoney(e.amount)} (${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })})`);
+    if (e.note) lines.push(`    Note: ${e.note}`);
   });
   lines.push('');
 
@@ -1710,6 +1814,7 @@ function buildDistributorPlanText(){
   else regular.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
     const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
     lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
+    if (i.note) lines.push(`    Note: ${i.note}`);
   });
   lines.push('');
 
@@ -1719,7 +1824,14 @@ function buildDistributorPlanText(){
   else debts.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
     const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
     lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
+    if (i.note) lines.push(`    Note: ${i.note}`);
   });
+
+  if (distNotes && distNotes.trim()){
+    lines.push('');
+    lines.push('Other Notes:');
+    lines.push(distNotes.trim());
+  }
 
   return lines.join('\n');
 }
@@ -1745,7 +1857,7 @@ function fallbackCopyText(text){
   ta.focus();
   ta.select();
   try { document.execCommand('copy'); alert('Plan copied to clipboard.'); }
-  catch(e){ alert('Could not copy automatically — use Export Plan instead.'); }
+  catch(e){ alert('Could not copy automatically. Use Export Plan instead.'); }
   document.body.removeChild(ta);
 }
 
@@ -1767,6 +1879,7 @@ function renderDistributor(){
   renderDistributorSummary();
   renderDistIncomeList();
   renderDistBudgetLists();
+  qs('dist-other-notes').value = distNotes;
 }
 
 /* ═══════════════════════════ INIT ═══════════════════════════ */

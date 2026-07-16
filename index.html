@@ -260,6 +260,10 @@
             <label for="income-amount">Amount (₱)</label>
             <input type="number" id="income-amount" placeholder="e.g. 25000" min="0" step="0.01" />
           </div>
+          <div class="field full">
+            <label for="income-note">Note <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <textarea id="income-note" rows="2" placeholder="Any details worth remembering..."></textarea>
+          </div>
         </div>
         <input type="hidden" id="editing-income-id" />
         <div style="display:flex; gap:8px;">
@@ -292,6 +296,10 @@
             <input type="checkbox" id="budget-item-is-debt" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
             <label for="budget-item-is-debt" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">This is a debt or credit card purchase</label>
           </div>
+          <div class="field full">
+            <label for="budget-item-note">Note <span style="text-transform:none;font-style:italic;">(optional)</span></label>
+            <textarea id="budget-item-note" rows="2" placeholder="Any details worth remembering..."></textarea>
+          </div>
         </div>
         <input type="hidden" id="editing-budget-item-id" />
         <div style="display:flex; gap:8px;">
@@ -308,6 +316,12 @@
       <section class="card">
         <h2>Debts &amp; Credit Card Purchases</h2>
         <div id="debt-items-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Other Notes</h2>
+        <p class="modal-sub" style="margin-bottom:10px;">Anything else worth keeping track of for this plan.</p>
+        <textarea id="dist-other-notes" rows="4" placeholder="e.g. Reminders, upcoming changes, things to double-check..." oninput="onDistNotesChange()"></textarea>
       </section>
     </div>
 
@@ -485,6 +499,13 @@
       </div>
       <div class="settings-row">
         <div>
+          <div class="settings-row-label">Clear Saved Ingredient Prices</div>
+          <div class="settings-row-desc">Clears remembered ingredient names & prices used to prefill new rows. Existing meals and grocery items are kept.</div>
+        </div>
+        <button class="btn-secondary" onclick="clearIngredientLibrary()">Clear</button>
+      </div>
+      <div class="settings-row">
+        <div>
           <div class="settings-row-label" style="color:var(--danger);">Reset All Data</div>
           <div class="settings-row-desc">Permanently erase everything.</div>
         </div>
@@ -503,7 +524,7 @@
       <div class="tutorial-steps">
         <div class="tutorial-step active" id="tut-step-0">
           <h3>Supplies Tracker</h3>
-          <p>Add food and supplies, group them by a custom-colored type, and track a unit and price. Each card has quick buttons to knock down stock, jump straight to a percent, or flag an item as needing a refill or out of stock — tap a status button again to clear it once you've restocked.</p>
+          <p>Add food and supplies, group them by a custom-colored type, and track a unit and price. Each card has quick buttons to knock down stock, jump straight to a percent, or flag an item as needing a refill or out of stock. Those flag buttons disappear once applied; restocking or picking the other status is what clears them.</p>
         </div>
         <div class="tutorial-step" id="tut-step-1">
           <h3>Bulk Pricing & Restock Cost</h3>
@@ -512,12 +533,12 @@
         </div>
         <div class="tutorial-step" id="tut-step-2">
           <h3>Meal Planner</h3>
-          <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal card shows how many ingredients are bought — tap Edit to see or check off the full list.</p>
-          <p style="margin-top:10px;">Meals belong to one week only. If you type the same ingredient name into more than one meal, it's treated as one shared item — buying it checks it off for every meal that uses it. Reuse a past meal anytime and pick which day to place it on. Check off items in the Grocery List as you shop.</p>
+          <p>Plan meals for any day of the week and list the ingredients you'll need. Each meal card shows how many ingredients are bought; tap Edit to see or check off the full list.</p>
+          <p style="margin-top:10px;">Meals belong to one week only. If you type the same ingredient name into more than one meal, it's treated as one shared item, so buying it checks it off for every meal that uses it. Reuse a past meal anytime and pick which day to place it on. Check off items in the Grocery List as you shop.</p>
         </div>
         <div class="tutorial-step" id="tut-step-3">
           <h3>Distributor</h3>
-          <p>Set a Plan Date, then log expected income and planned expenses to see what's left. Mark a purchase as debt or credit card, and it counts as income too — since it's financed rather than paid from cash on hand, Money Left won't go negative just because it's on credit.</p>
+          <p>Set a Plan Date, then log expected income and planned expenses to see what's left. Mark a purchase as debt or credit card, and it counts as income too, since it's financed rather than paid from cash on hand, so Money Left won't go negative just because it's on credit.</p>
           <p style="margin-top:10px;">Use Copy Plan or Export Plan anytime to save a quick reference of the whole tab.</p>
         </div>
       </div>
@@ -552,7 +573,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.7</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.8</p>
   </footer>
 
 </body>

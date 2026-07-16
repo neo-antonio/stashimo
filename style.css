@@ -258,7 +258,12 @@ button:active { transform: scale(0.97); }
 .ingredient-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .ingredient-row input[type="text"] { flex: 2; }
 .ingredient-row input[type="number"] { flex: 1; }
+.ingredient-row input[type="number"]:disabled { background: var(--bg); color: var(--text-dim); cursor: not-allowed; opacity: 0.85; }
 .ingredient-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+/* Inputs backed by a <datalist> (autocomplete suggestions) render a small
+   dropdown-arrow indicator in Chrome/Edge/Safari; hide it for a cleaner look
+   since the suggestions still pop up on focus/typing without it. */
+input[list]::-webkit-calendar-picker-indicator { display: none !important; }
 .ingredient-row .icon-btn { flex-shrink: 0; font-size: 15px; }
 .ing-shared-hint { flex-basis: 100%; font-size: 11px; color: var(--text-dim); margin-top: -2px; }
 .ing-shared-hint:empty { display: none; }
@@ -331,18 +336,21 @@ button:active { transform: scale(0.97); }
 .grocery-item-name { font-size: 13.5px; font-weight: 500; color: var(--text); }
 .grocery-item.bought .grocery-item-name { text-decoration: line-through; color: var(--text-dim); }
 .grocery-item-meal { font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-.grocery-item-cost { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
+.grocery-item-cost { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; cursor: pointer; border-bottom: 1px dashed var(--input-border); padding-bottom: 1px; }
+.grocery-item-cost:hover { color: var(--text); border-bottom-color: var(--text-dim); }
 .grocery-item.bought .grocery-item-cost { color: var(--text-dim); }
+.grocery-item-cost-input { flex-shrink: 0; width: 68px; font-size: 13px; font-weight: 700; padding: 3px 6px; min-height: 0; text-align: right; }
 
 /* ─── DISTRIBUTOR LIST ITEMS ─── */
-.dist-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
+.dist-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
 .dist-item:last-child { border-bottom: none; }
-.dist-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+.dist-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; margin-top: 2px; }
 .dist-item-info { flex: 1; min-width: 0; }
 .dist-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .dist-item.paid .dist-item-name { text-decoration: line-through; color: var(--text-dim); }
 .dist-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-.dist-item-amount { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
+.dist-item-note { font-size: 12px; color: var(--text-mid); margin-top: 4px; white-space: pre-wrap; overflow-wrap: break-word; }
+.dist-item-amount { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; margin-top: 1px; }
 .dist-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .grocery-item .icon-btn { flex-shrink: 0; }
 
