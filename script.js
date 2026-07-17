@@ -25,7 +25,7 @@ const LS_KEYS = {
   pantryExpanded: 'stashimo_pantry_expanded',
   income: 'stashimo_income',
   budgetItems: 'stashimo_budget_items',
-  distPlanDate: 'stashimo_dist_plan_date',
+  distPlanName: 'stashimo_dist_plan_name',
   distNotes: 'stashimo_dist_notes',
   // legacy keys used for one-time migration
   legacyTags: 'stashimo_tags',
@@ -92,7 +92,7 @@ let pantryFilter = 'all';
 let pantryExpanded = localStorage.getItem(LS_KEYS.pantryExpanded) === '1';
 let incomeEntries = loadJSON(LS_KEYS.income, []);
 let budgetItems = loadJSON(LS_KEYS.budgetItems, []);
-let distPlanDate = localStorage.getItem(LS_KEYS.distPlanDate) || toISODate(new Date());
+let distPlanName = localStorage.getItem(LS_KEYS.distPlanName) || '';
 let distNotes = localStorage.getItem(LS_KEYS.distNotes) || '';
 let selectedTypeFilters = null; // Set of type ids (+ 'none' for orphans) currently shown; null = not yet initialized
 let calViewDate = fromISODate(currentWeekStart);
@@ -222,7 +222,7 @@ function saveExtraGroceryItems(){ localStorage.setItem(LS_KEYS.extraGrocery, JSO
 function saveIncomeEntries(){ localStorage.setItem(LS_KEYS.income, JSON.stringify(incomeEntries)); }
 function saveBudgetItems(){ localStorage.setItem(LS_KEYS.budgetItems, JSON.stringify(budgetItems)); }
 function persistCurrentWeek(){ localStorage.setItem(LS_KEYS.week, currentWeekStart); }
-function persistDistPlanDate(){ localStorage.setItem(LS_KEYS.distPlanDate, distPlanDate); }
+function persistDistPlanName(){ localStorage.setItem(LS_KEYS.distPlanName, distPlanName); }
 function persistDistNotes(){ localStorage.setItem(LS_KEYS.distNotes, distNotes); }
 
 /* ─── PAGE NAV ─── */
@@ -1459,7 +1459,7 @@ function closeSettings(){ qs('settings-overlay').classList.add('hidden'); }
 function exportData(){
   const payload = {
     items, types, meals, weekIngredients, ingredientLibrary, extraGroceryItems, incomeEntries, budgetItems,
-    distPlanDate, distNotes, exportedAt: new Date().toISOString(), version: 'stashimo-v0.8'
+    distPlanName, distNotes, exportedAt: new Date().toISOString(), version: 'stashimo-v0.9'
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1492,10 +1492,10 @@ function importData(event){
       extraGroceryItems = data.extraGroceryItems || {};
       incomeEntries = data.incomeEntries || [];
       budgetItems = data.budgetItems || [];
-      distPlanDate = data.distPlanDate || toISODate(new Date());
+      distPlanName = data.distPlanName || '';
       distNotes = data.distNotes || '';
       saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
-      saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate(); persistDistNotes();
+      saveIncomeEntries(); saveBudgetItems(); persistDistPlanName(); persistDistNotes();
       refreshTypeSelects();
       renderPantry();
       renderRestockEstimate();
@@ -1521,10 +1521,10 @@ function resetAllData(){
   types = [{ id: uid(), name: 'Food' }];
   incomeEntries = [];
   budgetItems = [];
-  distPlanDate = toISODate(new Date());
+  distPlanName = '';
   distNotes = '';
   saveItems(); saveTypes(); saveMeals(); saveWeekIngredients(); saveIngredientLibrary(); saveExtraGroceryItems();
-  saveIncomeEntries(); saveBudgetItems(); persistDistPlanDate(); persistDistNotes();
+  saveIncomeEntries(); saveBudgetItems(); persistDistPlanName(); persistDistNotes();
   refreshTypeSelects();
   renderPantry();
   renderRestockEstimate();
@@ -1570,7 +1570,6 @@ function resetIncomeForm(){
   qs('income-name').value = '';
   qs('income-date').value = '';
   qs('income-amount').value = '';
-  qs('income-note').value = '';
   qs('save-income-btn').textContent = 'Save Income';
   qs('income-delete-btn').style.display = 'none';
 }
@@ -1582,14 +1581,13 @@ function saveIncome(){
   if (!date){ alert('Please choose an expected date.'); return; }
   const amountRaw = qs('income-amount').value;
   const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
-  const note = qs('income-note').value.trim();
 
   const editingId = qs('editing-income-id').value;
   if (editingId){
     const entry = incomeEntries.find(e => e.id === editingId);
-    if (entry) Object.assign(entry, { name, date, amount, note });
+    if (entry) Object.assign(entry, { name, date, amount });
   } else {
-    incomeEntries.push({ id: uid(), name, date, amount, note });
+    incomeEntries.push({ id: uid(), name, date, amount });
   }
   saveIncomeEntries();
   resetIncomeForm();
@@ -1603,7 +1601,6 @@ function editIncomeInline(id){
   qs('income-name').value = entry.name;
   qs('income-date').value = entry.date;
   qs('income-amount').value = entry.amount;
-  qs('income-note').value = entry.note || '';
   qs('save-income-btn').textContent = 'Update Income';
   qs('income-delete-btn').style.display = 'block';
   qs('add-income-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1632,7 +1629,6 @@ function resetBudgetItemForm(){
   qs('budget-item-date').value = '';
   qs('budget-item-amount').value = '';
   qs('budget-item-is-debt').checked = false;
-  qs('budget-item-note').value = '';
   qs('save-budget-item-btn').textContent = 'Save Item';
   qs('budget-item-delete-btn').style.display = 'none';
 }
@@ -1644,14 +1640,13 @@ function saveBudgetItem(){
   const amountRaw = qs('budget-item-amount').value;
   const amount = amountRaw === '' ? 0 : Math.max(0, parseFloat(amountRaw));
   const isDebt = qs('budget-item-is-debt').checked;
-  const note = qs('budget-item-note').value.trim();
 
   const editingId = qs('editing-budget-item-id').value;
   if (editingId){
     const item = budgetItems.find(i => i.id === editingId);
-    if (item) Object.assign(item, { name, date, amount, isDebt, note });
+    if (item) Object.assign(item, { name, date, amount, isDebt });
   } else {
-    budgetItems.push({ id: uid(), name, date, amount, isDebt, note, paid: false });
+    budgetItems.push({ id: uid(), name, date, amount, isDebt, paid: false });
   }
   saveBudgetItems();
   resetBudgetItemForm();
@@ -1666,7 +1661,6 @@ function editBudgetItemInline(id){
   qs('budget-item-date').value = item.date || '';
   qs('budget-item-amount').value = item.amount;
   qs('budget-item-is-debt').checked = !!item.isDebt;
-  qs('budget-item-note').value = item.note || '';
   qs('save-budget-item-btn').textContent = 'Update Item';
   qs('budget-item-delete-btn').style.display = 'block';
   qs('add-budget-item-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1709,7 +1703,6 @@ function renderDistIncomeList(){
       <div class="dist-item-info">
         <div class="dist-item-name">${esc(e.name)}</div>
         <div class="dist-item-meta">${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</div>
-        ${e.note ? `<div class="dist-item-note">${esc(e.note)}</div>` : ''}
       </div>
       <div class="dist-item-amount">₱${formatMoney(e.amount)}</div>
       <div class="dist-item-actions">
@@ -1730,7 +1723,6 @@ function renderDistBudgetLists(){
       <div class="dist-item-info">
         <div class="dist-item-name">${esc(i.name)}</div>
         <div class="dist-item-meta">${i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set'}</div>
-        ${i.note ? `<div class="dist-item-note">${esc(i.note)}</div>` : ''}
       </div>
       <div class="dist-item-amount">₱${formatMoney(i.amount)}</div>
       <div class="dist-item-actions">
@@ -1748,15 +1740,13 @@ function renderDistBudgetLists(){
     : '<p class="empty-msg">No debts or credit card purchases yet.</p>';
 }
 
-function renderDistPlanDateInput(){
-  qs('dist-plan-date').value = distPlanDate;
+function renderDistPlanNameInput(){
+  qs('dist-plan-name').value = distPlanName;
 }
 
-function onDistPlanDateChange(){
-  const val = qs('dist-plan-date').value;
-  distPlanDate = val || toISODate(new Date());
-  persistDistPlanDate();
-  renderDistributorSummary();
+function onDistPlanNameChange(){
+  distPlanName = qs('dist-plan-name').value.trim();
+  persistDistPlanName();
 }
 
 function onDistNotesChange(){
@@ -1772,25 +1762,21 @@ function renderDistributorSummary(){
   const moneyLeft = totalIncome - totalItems;
   qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
   qs('dist-debts-accrued').textContent = '₱' + formatMoney(totalDebtsAccrued);
-
-  const upcoming = incomeEntries.filter(e => e.date >= distPlanDate).sort((a, b) => a.date.localeCompare(b.date));
-  qs('dist-expected-salary').textContent = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
+  qs('dist-expected-salary').textContent = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None planned';
 }
 
 /* Plain-text snapshot of the whole Distributor tab, for the copy/export
    buttons — a quick reference you can paste or save elsewhere. */
 function buildDistributorPlanText(){
-  const planDateLabel = fromISODate(distPlanDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
   const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
   const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
   const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
   const moneyLeft = totalIncome - totalItems;
-  const upcoming = incomeEntries.filter(e => e.date >= distPlanDate).sort((a, b) => a.date.localeCompare(b.date));
-  const expectedSalary = upcoming.length > 0 ? '₱' + formatMoney(upcoming[0].amount) : 'None planned';
+  const expectedSalary = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None planned';
 
   const lines = [];
   lines.push('STASHIMO - Distributor Plan');
-  lines.push('Plan Date: ' + planDateLabel);
+  lines.push('Plan Name: ' + (distPlanName || 'Untitled Plan'));
   lines.push('');
   lines.push('Money Left: ₱' + formatMoney(moneyLeft));
   lines.push('Expected Salary: ' + expectedSalary);
@@ -1801,7 +1787,6 @@ function buildDistributorPlanText(){
   if (incomeEntries.length === 0) lines.push('  (none)');
   else incomeEntries.slice().sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
     lines.push(`  - ${e.name}: ₱${formatMoney(e.amount)} (${fromISODate(e.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })})`);
-    if (e.note) lines.push(`    Note: ${e.note}`);
   });
   lines.push('');
 
@@ -1811,7 +1796,6 @@ function buildDistributorPlanText(){
   else regular.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
     const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
     lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
-    if (i.note) lines.push(`    Note: ${i.note}`);
   });
   lines.push('');
 
@@ -1821,7 +1805,6 @@ function buildDistributorPlanText(){
   else debts.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(i => {
     const dateLabel = i.date ? fromISODate(i.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'No date set';
     lines.push(`  - ${i.name}: ₱${formatMoney(i.amount)} (${dateLabel})${i.paid ? ' [paid]' : ''}`);
-    if (i.note) lines.push(`    Note: ${i.note}`);
   });
 
   if (distNotes && distNotes.trim()){
@@ -1864,15 +1847,28 @@ function exportDistributorPlan(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'stashimo-distributor-plan-' + distPlanDate + '.txt';
+  a.download = 'stashimo-distributor-plan-' + toISODate(new Date()) + '.txt';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
+/* Wipes all logged income and expense/debt entries for a fresh plan.
+   Plan Name and Other Notes are left untouched. */
+function clearDistributorEntries(){
+  if (!confirm('This clears all saved income and expenses/repayments in the Distributor tab. This can\'t be undone. Continue?')) return;
+  incomeEntries = [];
+  budgetItems = [];
+  saveIncomeEntries();
+  saveBudgetItems();
+  resetIncomeForm();
+  resetBudgetItemForm();
+  renderDistributor();
+}
+
 function renderDistributor(){
-  renderDistPlanDateInput();
+  renderDistPlanNameInput();
   renderDistributorSummary();
   renderDistIncomeList();
   renderDistBudgetLists();

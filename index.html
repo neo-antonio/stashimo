@@ -222,8 +222,8 @@
           <h2>Overview</h2>
         </div>
         <div class="field full" style="margin-bottom:14px;">
-          <label for="dist-plan-date">Plan Date</label>
-          <input type="date" id="dist-plan-date" onchange="onDistPlanDateChange()" />
+          <label for="dist-plan-name">Plan Name</label>
+          <input type="text" id="dist-plan-name" placeholder="e.g. July Budget" onchange="onDistPlanNameChange()" />
         </div>
         <div class="grocery-summary">
           <div class="grocery-stat">
@@ -240,13 +240,14 @@
           </div>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn-secondary" style="flex:1;" onclick="copyDistributorPlan()">Copy Plan</button>
-          <button class="btn-secondary" style="flex:1;" onclick="exportDistributorPlan()">Export Plan</button>
+          <button class="btn-secondary" style="flex:1;" onclick="copyDistributorPlan()">Copy</button>
+          <button class="btn-secondary" style="flex:1;" onclick="exportDistributorPlan()">Export</button>
+          <button class="btn-delete" style="flex:1;" onclick="clearDistributorEntries()">Clear</button>
         </div>
       </section>
 
       <section class="card" id="add-income-section">
-        <h2>Add Income</h2>
+        <h2>Add Income or Credit</h2>
         <div class="form-grid">
           <div class="field full">
             <label for="income-name">Name</label>
@@ -260,15 +261,11 @@
             <label for="income-amount">Amount (₱)</label>
             <input type="number" id="income-amount" placeholder="e.g. 25000" min="0" step="0.01" />
           </div>
-          <div class="field full">
-            <label for="income-note">Note <span style="text-transform:none;font-style:italic;">(optional)</span></label>
-            <textarea id="income-note" rows="2" placeholder="Any details worth remembering..."></textarea>
-          </div>
         </div>
         <input type="hidden" id="editing-income-id" />
-        <div style="display:flex; gap:8px;">
-          <button id="save-income-btn" onclick="saveIncome()" style="flex:1;">Save Income</button>
-          <button class="btn-delete" id="income-delete-btn" style="display:none; flex-shrink:0;" onclick="deleteIncomeFromForm()">Delete</button>
+        <div class="form-actions-row">
+          <button class="btn-delete" id="income-delete-btn" style="display:none;" onclick="deleteIncomeFromForm()">Delete</button>
+          <button id="save-income-btn" onclick="saveIncome()">Save Income</button>
         </div>
       </section>
 
@@ -278,7 +275,7 @@
       </section>
 
       <section class="card" id="add-budget-item-section">
-        <h2>Add Item</h2>
+        <h2>Add Expense or Repayments</h2>
         <div class="form-grid">
           <div class="field full">
             <label for="budget-item-name">Name</label>
@@ -296,15 +293,11 @@
             <input type="checkbox" id="budget-item-is-debt" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
             <label for="budget-item-is-debt" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">This is a debt or credit card purchase</label>
           </div>
-          <div class="field full">
-            <label for="budget-item-note">Note <span style="text-transform:none;font-style:italic;">(optional)</span></label>
-            <textarea id="budget-item-note" rows="2" placeholder="Any details worth remembering..."></textarea>
-          </div>
         </div>
         <input type="hidden" id="editing-budget-item-id" />
-        <div style="display:flex; gap:8px;">
-          <button id="save-budget-item-btn" onclick="saveBudgetItem()" style="flex:1;">Save Item</button>
-          <button class="btn-delete" id="budget-item-delete-btn" style="display:none; flex-shrink:0;" onclick="deleteBudgetItemFromForm()">Delete</button>
+        <div class="form-actions-row">
+          <button class="btn-delete" id="budget-item-delete-btn" style="display:none;" onclick="deleteBudgetItemFromForm()">Delete</button>
+          <button id="save-budget-item-btn" onclick="saveBudgetItem()">Save Item</button>
         </div>
       </section>
 
@@ -321,7 +314,7 @@
       <section class="card">
         <h2>Other Notes</h2>
         <p class="modal-sub" style="margin-bottom:10px;">Anything else worth keeping track of for this plan.</p>
-        <textarea id="dist-other-notes" rows="4" placeholder="e.g. Reminders, upcoming changes, things to double-check..." oninput="onDistNotesChange()"></textarea>
+        <textarea id="dist-other-notes" rows="4" placeholder="e.g. reminders, transfer from accounts, upcoming changes..." oninput="onDistNotesChange()"></textarea>
       </section>
     </div>
 
@@ -538,7 +531,7 @@
         </div>
         <div class="tutorial-step" id="tut-step-3">
           <h3>Distributor</h3>
-          <p>Set a Plan Date, then log expected income and planned expenses to see what's left. Mark a purchase as debt or credit card, and it's tracked separately as Debts Accrued so you can see what you owe, on top of reducing Money Left like any other expense.</p>
+          <p>Name your plan, then log expected income and planned expenses to see what's left. Mark a purchase as debt or credit card, and it's tracked separately as Debts Accrued so you can see what you owe, on top of reducing Money Left like any other expense.</p>
           <p style="margin-top:10px;">Use Copy Plan or Export Plan anytime to save a quick reference of the whole tab.</p>
         </div>
       </div>
@@ -573,7 +566,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.9</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.91</p>
   </footer>
 
 </body>
