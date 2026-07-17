@@ -7,6 +7,7 @@
 const ICON_EDIT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>';
+const ICON_CLOCK = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
 
 /* ─── CONSTANTS ─── */
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -230,6 +231,9 @@ const PAGE_ORDER = ['pantry', 'planner', 'distributor'];
 
 function showPage(name, btnEl, fromBottom){
   currentPage = name;
+  if (name === 'pantry'){
+    processAutoDeducts();
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   qs('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
@@ -253,6 +257,7 @@ function onTrackPercentChange(checkboxId, percentFieldId){
   const checked = qs(checkboxId).checked;
   const percentField = qs(percentFieldId);
   if (percentField) percentField.style.display = checked ? 'block' : 'none';
+  refreshAutoDeductModeOptions(checkboxId.replace('-track-percent', ''));
 }
 
 /* ─── COLLAPSIBLE SECTIONS (Reuse Past Meal / All Ingredients / Type Filter) ─── */
@@ -461,6 +466,250 @@ function recomputeStatus(item){
   else item.status = 'ok';
 }
 
+/* ═══════════════════════════ AUTO-DEDUCT SCHEDULING ═══════════════════════════
+   An item can optionally have ONE auto-deduct rule (never both count and percent):
+   - mode 'count': subtracts `amount` from currentCount on schedule, floored at 0.
+   - mode 'percent': subtracts `amount` from lastUnitPercent on schedule, but only
+     once the item is down to its last unit (currentCount === 1), and never on the
+     same day it first reached the last unit — ticks only start the day after.
+   Since there's no background process, elapsed ticks are caught up whenever the
+   app is opened/viewed (processAutoDeducts), using lastAppliedDate as a rolling
+   anchor so the configured cadence (every N days / specific weekdays / a fixed
+   day of month) stays exact even across multiple catch-up passes. */
+
+function lastDayOfMonth(d){ return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
+
+function computeAutoDeductTicksDue(ad, fromISO, toISO){
+  if (!fromISO || fromISO >= toISO) return { ticks: 0, newFromISO: fromISO };
+  const from = fromISODate(fromISO);
+  const to = fromISODate(toISO);
+
+  if (ad.freqType === 'days'){
+    const n = Math.max(1, ad.freqN || 1);
+    const diffDays = Math.round((to - from) / 86400000);
+    const ticks = Math.floor(diffDays / n);
+    if (ticks <= 0) return { ticks: 0, newFromISO: fromISO };
+    return { ticks, newFromISO: toISODate(addDays(from, ticks * n)) };
+  }
+
+  if (ad.freqType === 'week'){
+    const weekdays = (ad.freqWeekdays && ad.freqWeekdays.length) ? ad.freqWeekdays : [0];
+    let ticks = 0, cursor = from, guard = 0;
+    while (cursor < to && guard < 2000){
+      cursor = addDays(cursor, 1);
+      guard++;
+      if (weekdays.includes((cursor.getDay() + 6) % 7)) ticks++;
+    }
+    return { ticks, newFromISO: toISO };
+  }
+
+  if (ad.freqType === 'month'){
+    const targetDay = Math.min(31, Math.max(1, ad.freqMonthDay || 1));
+    let ticks = 0, cursor = from, guard = 0;
+    while (cursor < to && guard < 2000){
+      cursor = addDays(cursor, 1);
+      guard++;
+      const isTarget = cursor.getDate() === targetDay;
+      // Months shorter than the target day (e.g. day 31 in Feb) tick on the last day instead.
+      const isShortMonthFallback = targetDay > 28 && cursor.getDate() === lastDayOfMonth(cursor) && lastDayOfMonth(cursor) < targetDay;
+      if (isTarget || isShortMonthFallback) ticks++;
+    }
+    return { ticks, newFromISO: toISO };
+  }
+
+  return { ticks: 0, newFromISO: fromISO };
+}
+
+/* Called after any manual stock change (buttons or the edit form) to reset the
+   schedule's clock: a manual touch means "I just accounted for this stock
+   myself", so the next auto-tick should count forward from today, not from
+   whatever backlog built up before. */
+function touchAutoDeductClock(item){
+  if (!item.autoDeduct) return;
+  const todayISO = toISODate(new Date());
+  item.autoDeduct.lastAppliedDate = todayISO;
+  if (item.autoDeduct.mode === 'percent'){
+    item.autoDeduct.lastUnitReachedDate = (item.currentCount === 1) ? todayISO : null;
+  }
+}
+
+function applyAutoDeductForItem(item, todayISO){
+  const ad = item.autoDeduct;
+  if (!ad || item.currentCount == null) return false;
+
+  if (ad.mode === 'count'){
+    if (item.currentCount <= 0) return false;
+    const fromISO = ad.lastAppliedDate || todayISO;
+    const { ticks, newFromISO } = computeAutoDeductTicksDue(ad, fromISO, todayISO);
+    if (ticks <= 0) return false;
+    const amount = Math.max(1, ad.amount || 1);
+    item.currentCount = Math.max(0, item.currentCount - ticks * amount);
+    ad.lastAppliedDate = newFromISO;
+    recomputeStatus(item);
+    return true;
+  }
+
+  if (ad.mode === 'percent'){
+    // Keep lastUnitReachedDate in sync in case currentCount changed through a
+    // path that didn't call touchAutoDeductClock (defensive fallback).
+    if (item.currentCount === 1){
+      if (!ad.lastUnitReachedDate) ad.lastUnitReachedDate = todayISO;
+    } else {
+      ad.lastUnitReachedDate = null;
+      ad.lastAppliedDate = null;
+      return false;
+    }
+    const fromISO = ad.lastAppliedDate || ad.lastUnitReachedDate;
+    const { ticks, newFromISO } = computeAutoDeductTicksDue(ad, fromISO, todayISO);
+    if (ticks <= 0) return false;
+    const amount = Math.max(1, ad.amount || 1);
+    const cur = item.lastUnitPercent != null ? item.lastUnitPercent : 100;
+    const next = cur - ticks * amount;
+    if (next <= 0){
+      item.currentCount = 0;
+      item.lastUnitPercent = 100;
+      ad.lastUnitReachedDate = null;
+    } else {
+      item.lastUnitPercent = next;
+    }
+    ad.lastAppliedDate = newFromISO;
+    recomputeStatus(item);
+    return true;
+  }
+
+  return false;
+}
+
+function processAutoDeducts(){
+  const todayISO = toISODate(new Date());
+  let changed = false;
+  items.forEach(item => { if (applyAutoDeductForItem(item, todayISO)) changed = true; });
+  if (changed){
+    saveItems();
+    renderPantry();
+    renderRestockEstimate();
+  }
+}
+
+function autoDeductConfigsEqual(a, b){
+  if (!a || !b) return false;
+  if (a.mode !== b.mode || a.amount !== b.amount || a.freqType !== b.freqType) return false;
+  if (a.freqType === 'days') return a.freqN === b.freqN;
+  if (a.freqType === 'month') return a.freqMonthDay === b.freqMonthDay;
+  if (a.freqType === 'week'){
+    const wa = (a.freqWeekdays || []).slice().sort().join(',');
+    const wb = (b.freqWeekdays || []).slice().sort().join(',');
+    return wa === wb;
+  }
+  return true;
+}
+
+const AUTO_DEDUCT_DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function onAutoDeductToggle(prefix){
+  const enabled = qs(`${prefix}-auto-deduct-enabled`).checked;
+  qs(`${prefix}-auto-deduct-wrap`).style.display = enabled ? 'flex' : 'none';
+  if (enabled){
+    refreshAutoDeductModeOptions(prefix);
+    renderAutoDeductFreqDetail(prefix);
+  }
+}
+
+function onAutoDeductModeChange(prefix){ /* no extra behavior needed beyond the value itself */ }
+
+function refreshAutoDeductModeOptions(prefix){
+  const trackCheckbox = qs(`${prefix}-track-percent`);
+  const modeSel = qs(`${prefix}-auto-deduct-mode`);
+  if (!trackCheckbox || !modeSel) return;
+  const trackPercent = trackCheckbox.checked;
+  const percentOption = modeSel.querySelector('option[value="percent"]');
+  if (percentOption) percentOption.disabled = !trackPercent;
+  if (!trackPercent && modeSel.value === 'percent') modeSel.value = 'count';
+}
+
+function onAutoDeductFreqTypeChange(prefix){ renderAutoDeductFreqDetail(prefix); }
+
+function renderAutoDeductFreqDetail(prefix, savedAd){
+  const type = qs(`${prefix}-auto-deduct-freq-type`).value;
+  const wrap = qs(`${prefix}-auto-deduct-freq-detail`);
+  if (type === 'days'){
+    const n = (savedAd && savedAd.freqType === 'days' && savedAd.freqN) ? savedAd.freqN : 1;
+    wrap.innerHTML = `<div class="auto-deduct-row"><span class="auto-deduct-inline-label">Every</span><input type="number" id="${prefix}-auto-deduct-freq-n" min="1" value="${n}" /><span class="auto-deduct-inline-label">day(s)</span></div>`;
+  } else if (type === 'week'){
+    const selected = (savedAd && savedAd.freqType === 'week' && savedAd.freqWeekdays) ? savedAd.freqWeekdays : [];
+    wrap.innerHTML = `<div class="weekday-toggle-row" id="${prefix}-auto-deduct-weekdays">${AUTO_DEDUCT_DAY_LETTERS.map((l, i) =>
+      `<button type="button" class="weekday-toggle-btn ${selected.includes(i) ? 'active' : ''}" data-day="${i}" onclick="this.classList.toggle('active')">${l}</button>`
+    ).join('')}</div>`;
+  } else if (type === 'month'){
+    const day = (savedAd && savedAd.freqType === 'month' && savedAd.freqMonthDay) ? savedAd.freqMonthDay : 1;
+    wrap.innerHTML = `<div class="auto-deduct-row"><span class="auto-deduct-inline-label">Day</span><input type="number" id="${prefix}-auto-deduct-month-day" min="1" max="31" value="${day}" /><span class="auto-deduct-inline-label">of each month</span></div>`;
+  }
+}
+
+/* Reads the auto-deduct section of a form. Returns:
+   - null if the "Auto-deduct on a schedule" checkbox is off
+   - false if it's on but invalid (e.g. no weekday picked) — an alert is shown
+   - a config object otherwise */
+function collectAutoDeductConfig(prefix){
+  if (!qs(`${prefix}-auto-deduct-enabled`).checked) return null;
+  const mode = qs(`${prefix}-auto-deduct-mode`).value;
+  const amountRaw = qs(`${prefix}-auto-deduct-amount`).value;
+  const amount = amountRaw === '' ? 1 : Math.max(1, parseFloat(amountRaw));
+  const freqType = qs(`${prefix}-auto-deduct-freq-type`).value;
+  const config = { mode, amount, freqType, lastAppliedDate: null, lastUnitReachedDate: null };
+
+  if (freqType === 'days'){
+    const nRaw = qs(`${prefix}-auto-deduct-freq-n`).value;
+    config.freqN = nRaw === '' ? 1 : Math.max(1, parseInt(nRaw, 10));
+  } else if (freqType === 'week'){
+    const btns = document.querySelectorAll(`#${prefix}-auto-deduct-weekdays .weekday-toggle-btn.active`);
+    config.freqWeekdays = Array.from(btns).map(b => parseInt(b.dataset.day, 10));
+    if (config.freqWeekdays.length === 0){
+      alert('Please choose at least one day of the week for the auto-deduct schedule.');
+      return false;
+    }
+  } else if (freqType === 'month'){
+    const dayRaw = qs(`${prefix}-auto-deduct-month-day`).value;
+    config.freqMonthDay = dayRaw === '' ? 1 : Math.min(31, Math.max(1, parseInt(dayRaw, 10)));
+  }
+  return config;
+}
+
+/* Applies a freshly-collected config to an item: keeps the existing schedule
+   clock running if nothing actually changed, otherwise starts it fresh from
+   today (see touchAutoDeductClock for why). */
+function applyAutoDeductConfigToItem(item, newConfig){
+  if (!newConfig){ item.autoDeduct = null; return; }
+  if (autoDeductConfigsEqual(newConfig, item.autoDeduct)){
+    newConfig.lastAppliedDate = item.autoDeduct.lastAppliedDate;
+    newConfig.lastUnitReachedDate = item.autoDeduct.lastUnitReachedDate;
+    item.autoDeduct = newConfig;
+  } else {
+    item.autoDeduct = newConfig;
+    touchAutoDeductClock(item);
+  }
+}
+
+function resetAutoDeductForm(prefix){
+  qs(`${prefix}-auto-deduct-enabled`).checked = false;
+  qs(`${prefix}-auto-deduct-wrap`).style.display = 'none';
+  qs(`${prefix}-auto-deduct-mode`).value = 'count';
+  qs(`${prefix}-auto-deduct-amount`).value = '1';
+  qs(`${prefix}-auto-deduct-freq-type`).value = 'days';
+  qs(`${prefix}-auto-deduct-freq-detail`).innerHTML = '';
+}
+
+function populateAutoDeductForm(prefix, ad){
+  qs(`${prefix}-auto-deduct-enabled`).checked = !!ad;
+  qs(`${prefix}-auto-deduct-wrap`).style.display = ad ? 'flex' : 'none';
+  qs(`${prefix}-auto-deduct-mode`).value = ad ? ad.mode : 'count';
+  qs(`${prefix}-auto-deduct-amount`).value = ad ? ad.amount : '1';
+  qs(`${prefix}-auto-deduct-freq-type`).value = ad ? ad.freqType : 'days';
+  refreshAutoDeductModeOptions(prefix);
+  if (ad) renderAutoDeductFreqDetail(prefix, ad);
+  else qs(`${prefix}-auto-deduct-freq-detail`).innerHTML = '';
+}
+
 function adjustPercent(id, delta){
   const item = items.find(i => i.id === id);
   if (!item || !item.trackPercent || item.currentCount !== 1) return;
@@ -474,6 +723,7 @@ function adjustPercent(id, delta){
     item.lastUnitPercent = Math.min(100, next);
   }
   recomputeStatus(item);
+  touchAutoDeductClock(item);
   saveItems();
   renderPantry();
   renderRestockEstimate();
@@ -495,6 +745,7 @@ function setPercentDirectly(id){
     item.lastUnitPercent = pct;
   }
   recomputeStatus(item);
+  touchAutoDeductClock(item);
   saveItems();
   renderPantry();
   renderRestockEstimate();
@@ -525,11 +776,14 @@ function saveItem(){
   const trackPercent = qs('item-track-percent').checked;
   const targetPercentRaw = qs('item-target-percent').value;
   const targetPercent = targetPercentRaw === '' ? null : Math.min(100, Math.max(0, parseInt(targetPercentRaw, 10)));
+  const autoDeductConfig = collectAutoDeductConfig('item');
+  if (autoDeductConfig === false) return;
   const item = {
     id: uid(), name, typeId, unit, minPrice, minUnits, currentCount, targetCount, status: 'ok',
     trackPercent, targetPercent, lastUnitPercent: 100
   };
   recomputeStatus(item);
+  applyAutoDeductConfigToItem(item, autoDeductConfig);
   items.push(item);
   saveItems();
   qs('item-name').value = '';
@@ -543,6 +797,7 @@ function saveItem(){
   qs('item-unit-custom').value = '';
   qs('item-track-percent').checked = false;
   qs('item-target-percent-wrap').style.display = 'none';
+  resetAutoDeductForm('item');
   renderPantry();
   renderRestockEstimate();
 }
@@ -552,6 +807,7 @@ function adjustCount(id, delta){
   if (!item || item.currentCount == null) return;
   item.currentCount = Math.max(0, item.currentCount + delta);
   recomputeStatus(item);
+  touchAutoDeductClock(item);
   saveItems();
   renderPantry();
   renderRestockEstimate();
@@ -567,6 +823,7 @@ function toggleStatus(id, status){
     item.status = status;
     if (status === 'out' && item.currentCount != null) item.currentCount = 0;
   }
+  touchAutoDeductClock(item);
   saveItems();
   renderPantry();
   renderRestockEstimate();
@@ -597,6 +854,7 @@ function editItem(id){
   qs('edit-item-track-percent').checked = !!item.trackPercent;
   qs('edit-item-target-percent').value = item.targetPercent != null ? item.targetPercent : '';
   qs('edit-item-target-percent-wrap').style.display = item.trackPercent ? 'block' : 'none';
+  populateAutoDeductForm('edit-item', item.autoDeduct);
   qs('item-modal-overlay').classList.remove('hidden');
 }
 function closeItemModal(){ qs('item-modal-overlay').classList.add('hidden'); }
@@ -620,6 +878,9 @@ function updateItem(){
   const targetPercentRaw = qs('edit-item-target-percent').value;
   item.targetPercent = targetPercentRaw === '' ? null : Math.min(100, Math.max(0, parseInt(targetPercentRaw, 10)));
   if (item.lastUnitPercent == null) item.lastUnitPercent = 100;
+  const autoDeductConfig = collectAutoDeductConfig('edit-item');
+  if (autoDeductConfig === false) return;
+  applyAutoDeductConfigToItem(item, autoDeductConfig);
   recomputeStatus(item);
   saveItems();
   closeItemModal();
@@ -720,21 +981,24 @@ function renderPantry(){
   let shown = 0;
   let html = '';
 
-  types.forEach(t => {
-    if (shown >= limit || !groups[t.id]) return;
+  // Items within each category, A to Z.
+  Object.keys(groups).forEach(key => {
+    groups[key].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  });
+
+  // Categories themselves, A to Z ("Other" sorts in by its own label too).
+  const groupEntries = [];
+  types.forEach(t => { if (groups[t.id]) groupEntries.push({ key: t.id, label: t.name }); });
+  if (groups['none']) groupEntries.push({ key: 'none', label: 'Other' });
+  groupEntries.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+
+  groupEntries.forEach(({ key, label }) => {
+    if (shown >= limit) return;
     const remaining = limit - shown;
-    const slice = groups[t.id].slice(0, remaining);
-    html += renderGroupHtml(t.name, slice, groups[t.id].length);
+    const slice = groups[key].slice(0, remaining);
+    html += renderGroupHtml(label, slice, groups[key].length);
     shown += slice.length;
   });
-  if (shown < limit && groups['none']){
-    const remaining = limit - shown;
-    const slice = groups['none'].slice(0, remaining);
-    if (slice.length > 0){
-      html += renderGroupHtml('Other', slice, groups['none'].length);
-      shown += slice.length;
-    }
-  }
 
   if (total > 10){
     html += pantryExpanded
@@ -817,10 +1081,15 @@ function renderItemCardHtml(item){
   const oosBtn = item.status === 'out'
     ? '' : `<button class="btn-pantry-action danger" onclick="toggleStatus('${item.id}','out')">OOS</button>`;
 
+  const autoDeductBtn = item.autoDeduct
+    ? `<button class="icon-btn pantry-title-icon-btn" onclick="editItem('${item.id}')" title="Auto-deduct is scheduled for this item">${ICON_CLOCK}</button>`
+    : '';
+
   return `
     <div class="pantry-item status-${item.status}">
       <div class="pantry-item-top">
         <div class="pantry-item-name">${esc(item.name)}</div>
+        ${autoDeductBtn}
         <span class="status-badge ${item.status}">${statusLabelMap[item.status]}</span>
       </div>
       <div class="pantry-item-meta">
@@ -1762,7 +2031,7 @@ function renderDistributorSummary(){
   const moneyLeft = totalIncome - totalItems;
   qs('dist-money-left').textContent = '₱' + formatMoney(moneyLeft);
   qs('dist-debts-accrued').textContent = '₱' + formatMoney(totalDebtsAccrued);
-  qs('dist-expected-salary').textContent = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None planned';
+  qs('dist-expected-salary').textContent = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None';
 }
 
 /* Plain-text snapshot of the whole Distributor tab, for the copy/export
@@ -1772,14 +2041,14 @@ function buildDistributorPlanText(){
   const totalItems = budgetItems.reduce((s, i) => s + (i.amount || 0), 0);
   const totalDebtsAccrued = budgetItems.filter(i => i.isDebt).reduce((s, i) => s + (i.amount || 0), 0);
   const moneyLeft = totalIncome - totalItems;
-  const expectedSalary = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None planned';
+  const expectedMoney = incomeEntries.length > 0 ? '₱' + formatMoney(totalIncome) : 'None';
 
   const lines = [];
   lines.push('STASHIMO - Distributor Plan');
   lines.push('Plan Name: ' + (distPlanName || 'Untitled Plan'));
   lines.push('');
   lines.push('Money Left: ₱' + formatMoney(moneyLeft));
-  lines.push('Expected Salary: ' + expectedSalary);
+  lines.push('Expected Money: ' + expectedMoney);
   lines.push('Debts Accrued: ₱' + formatMoney(totalDebtsAccrued));
   lines.push('');
 
@@ -1878,6 +2147,7 @@ function renderDistributor(){
 /* ═══════════════════════════ INIT ═══════════════════════════ */
 applyTheme(currentTheme);
 refreshTypeSelects();
+processAutoDeducts();
 renderPantry();
 renderRestockEstimate();
 renderPlanner();

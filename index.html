@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Stashimo" />
-  <meta name="theme-color" content="#23272f" />
+  <meta name="theme-color" content="#2c313a" />
   <meta name="description" content="An open-source lightweight supplies tracker and meal planner" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <meta name="msapplication-TileColor" content="#23272f" />
+  <meta name="msapplication-TileColor" content="#2c313a" />
   <title>Stashimo</title>
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="style.css" />
@@ -91,6 +91,27 @@
           <div class="field full" id="item-target-percent-wrap" style="display:none;">
             <label for="item-target-percent">Target % of Last Unit Before Refill</label>
             <input type="number" id="item-target-percent" placeholder="e.g. 20" min="0" max="100" />
+          </div>
+          <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+            <input type="checkbox" id="item-auto-deduct-enabled" onchange="onAutoDeductToggle('item')" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
+            <label for="item-auto-deduct-enabled" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">Auto-deduct on a schedule</label>
+          </div>
+          <div class="field full auto-deduct-wrap" id="item-auto-deduct-wrap" style="display:none;">
+            <div class="auto-deduct-row">
+              <select id="item-auto-deduct-mode" onchange="onAutoDeductModeChange('item')">
+                <option value="count">Reduce count by</option>
+                <option value="percent">Reduce last stock % by</option>
+              </select>
+              <input type="number" id="item-auto-deduct-amount" min="1" value="1" />
+            </div>
+            <div class="auto-deduct-row">
+              <select id="item-auto-deduct-freq-type" onchange="onAutoDeductFreqTypeChange('item')">
+                <option value="days">Every N days</option>
+                <option value="week">Weekly on</option>
+                <option value="month">Monthly on</option>
+              </select>
+            </div>
+            <div id="item-auto-deduct-freq-detail"></div>
           </div>
         </div>
         <div style="display:flex; gap:8px;">
@@ -232,7 +253,7 @@
           </div>
           <div class="grocery-stat">
             <span class="grocery-stat-val" id="dist-expected-salary">-</span>
-            <span class="grocery-stat-label">Expected Salary</span>
+            <span class="grocery-stat-label">Expected Money</span>
           </div>
           <div class="grocery-stat">
             <span class="grocery-stat-val" id="dist-debts-accrued">₱0</span>
@@ -270,7 +291,7 @@
       </section>
 
       <section class="card">
-        <h2>Income</h2>
+        <h2>Income and Credit</h2>
         <div id="income-list"></div>
       </section>
 
@@ -302,7 +323,7 @@
       </section>
 
       <section class="card">
-        <h2>Planned Items</h2>
+        <h2>Planned Expenses</h2>
         <div id="budget-items-list"></div>
       </section>
 
@@ -371,6 +392,27 @@
         <div class="field full" id="edit-item-target-percent-wrap" style="display:none;">
           <label>Target % of Last Unit Before Refill</label>
           <input type="number" id="edit-item-target-percent" min="0" max="100" />
+        </div>
+        <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" id="edit-item-auto-deduct-enabled" onchange="onAutoDeductToggle('edit-item')" style="width:16px; height:16px; accent-color:var(--border); flex-shrink:0;" />
+          <label for="edit-item-auto-deduct-enabled" style="text-transform:none; font-size:13px; font-weight:400; color:var(--text-mid); cursor:pointer;">Auto-deduct on a schedule</label>
+        </div>
+        <div class="field full auto-deduct-wrap" id="edit-item-auto-deduct-wrap" style="display:none;">
+          <div class="auto-deduct-row">
+            <select id="edit-item-auto-deduct-mode" onchange="onAutoDeductModeChange('edit-item')">
+              <option value="count">Reduce count by</option>
+              <option value="percent">Reduce last stock % by</option>
+            </select>
+            <input type="number" id="edit-item-auto-deduct-amount" min="1" value="1" />
+          </div>
+          <div class="auto-deduct-row">
+            <select id="edit-item-auto-deduct-freq-type" onchange="onAutoDeductFreqTypeChange('edit-item')">
+              <option value="days">Every N days</option>
+              <option value="week">Weekly on</option>
+              <option value="month">Monthly on</option>
+            </select>
+          </div>
+          <div id="edit-item-auto-deduct-freq-detail"></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -566,7 +608,7 @@
     <p class="footer-github">Visit <a href="https://neushimo.com/stashimo?utm_source=stashimo" target="_blank">neushimo.com</a> for updates</p>
     <p>©2026 Neo Antonio</p>
     <p>All rights reserved.</p>
-    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.91</p>
+    <p style="font-size:11px;color:#b0b5be;margin-top:2px;">stashimo v0.92</p>
   </footer>
 
 </body>

@@ -106,6 +106,19 @@ main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16
 .field.full { grid-column: 1 / -1; }
 label { font-size: 11px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; }
 
+.auto-deduct-wrap { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--bg); border: 1px solid var(--input-border); border-radius: 10px; }
+.auto-deduct-row { display: flex; gap: 6px; align-items: center; }
+.auto-deduct-row select { flex: 1.4; }
+.auto-deduct-row input[type="number"] { flex: 0.8; width: auto; min-width: 0; }
+.auto-deduct-inline-label { font-size: 12px; color: var(--text-mid); white-space: nowrap; flex-shrink: 0; }
+.weekday-toggle-row { display: flex; gap: 4px; }
+.weekday-toggle-btn {
+  flex: 1; padding: 7px 0; font-size: 11.5px; font-weight: 600; border-radius: 6px;
+  background: var(--surface); color: var(--text-mid); border: 1px solid var(--input-border); box-shadow: none;
+}
+.weekday-toggle-btn:hover { background: var(--accent-dim); opacity: 1; box-shadow: none; }
+.weekday-toggle-btn.active { background: var(--border); color: #fff; border-color: var(--border); }
+
 input[type="text"], input[type="number"], input[type="date"], textarea {
   background: var(--surface); border: 1px solid var(--input-border); border-radius: 8px;
   padding: 10px 12px; color: var(--text); font-size: 14px; font-family: 'Ubuntu', sans-serif;
@@ -146,7 +159,7 @@ button:active { transform: scale(0.97); }
 .btn-delete { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(192,82,58,0.2); }
 .btn-delete:hover { background: rgba(192,82,58,0.18); box-shadow: none; opacity: 1; }
 .form-actions-row { display: flex; gap: 8px; align-items: center; }
-.form-actions-row > button:last-child { margin-left: auto; }
+.form-actions-row > button:last-child { flex: 1; }
 .btn-add-card-item { width: 100%; margin-top: 12px; background: var(--accent-dim); color: var(--text); border: 1px solid var(--input-border); box-shadow: none; font-size: 13px; font-weight: 500; }
 .btn-add-card-item:hover { background: var(--border); color: #fff; opacity: 1; box-shadow: none; }
 
@@ -194,8 +207,10 @@ button:active { transform: scale(0.97); }
 }
 .pantry-item:last-child { margin-bottom: 0; }
 .pantry-item.status-out .pantry-item-name { opacity: 0.6; }
-.pantry-item-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 10px; margin-bottom: 6px; }
-.pantry-item-name { font-size: 14px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pantry-item-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 8px; margin-bottom: 6px; }
+.pantry-item-name { font-size: 14px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.pantry-title-icon-btn { flex-shrink: 0; padding: 3px 5px; border: 1px solid var(--input-border); border-radius: 6px; color: var(--text-dim); }
+.pantry-title-icon-btn svg { width: 12px; height: 12px; }
 .pantry-item-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 .pantry-count { font-size: 11px; color: var(--text-mid); font-weight: 500; }
 .pantry-count strong { color: var(--text); }
@@ -344,16 +359,15 @@ input[list]::-webkit-calendar-picker-indicator { display: none !important; }
 .grocery-item-cost-input { flex: 0 0 auto !important; width: 64px !important; max-width: 25vw; font-size: 13px; font-weight: 700; padding: 3px 6px; min-height: 0; text-align: right; }
 
 /* ─── DISTRIBUTOR LIST ITEMS ─── */
-.dist-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
+.dist-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--input-border); }
 .dist-item:last-child { border-bottom: none; }
-.dist-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; margin-top: 2px; }
+.dist-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
 .dist-item-info { flex: 1; min-width: 0; }
 .dist-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .dist-item.paid .dist-item-name { text-decoration: line-through; color: var(--text-dim); }
 .dist-item-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-.dist-item-note { font-size: 12px; color: var(--text-mid); margin-top: 4px; white-space: pre-wrap; overflow-wrap: break-word; }
-.dist-item-amount { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; margin-top: 1px; }
-.dist-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.dist-item-amount { font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; white-space: nowrap; }
+.dist-item-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
 .dist-item-actions .icon-btn { padding: 4px 6px; border: 1px solid var(--input-border); border-radius: 6px; }
 .dist-item-actions .icon-btn svg { width: 12px; height: 12px; }
 .grocery-item .icon-btn { flex-shrink: 0; }
@@ -419,7 +433,7 @@ input[list]::-webkit-calendar-picker-indicator { display: none !important; }
 
 .type-manage-row { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--input-border); }
 .type-manage-row:last-child { border-bottom: none; }
-.type-manage-row-actions { display: flex; gap: 6px; }
+.type-manage-row-actions { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
 
 /* ─── HELP BUTTON ─── */
 .help-btn {
@@ -491,6 +505,7 @@ footer { padding-bottom: max(24px, env(safe-area-inset-bottom)); padding-left: m
   button:not(.help-btn):not(.color-swatch):not(.btn-header-settings), .nav-tab, .bottom-nav-btn, input[type="text"], input[type="number"], select { min-height: 44px; }
   .btn-edit, .btn-delete, .btn-sm { min-height: 38px !important; }
   .pantry-actions .btn-pantry-action, .pantry-actions .icon-btn { min-height: 27px !important; padding: 4px 7px !important; }
+  .dist-item-actions .icon-btn { min-height: 27px !important; padding: 4px 7px !important; }
   .color-swatch { min-height: 0; width: 30px; height: 30px; }
   .btn-header-settings { padding: 6px 11px; font-size: 11px; min-height: 0; height: auto; line-height: 1.3; }
 
